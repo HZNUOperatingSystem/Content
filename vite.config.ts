@@ -9,7 +9,4 @@ export default defineConfig({
   resolve: {
     tsconfigPaths: true,
   },
-  ssr: {
-    external: ['@takumi-rs/image-response'],
-  },
 })
