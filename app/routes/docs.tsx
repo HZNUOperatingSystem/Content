@@ -44,9 +44,9 @@ const clientLoader = browserCollections.docs.createClientLoader({
         <p className="text-lg text-fd-muted-foreground mb-2">
           {frontmatter.description}
         </p>
-        <div className="flex flex-row flex-wrap items-center gap-2 border-b border-fd-border pb-4">
+        <div className="flex flex-row flex-wrap items-center gap-2 border-b border-fd-border pb-4 mb-4">
           <MarkdownCopyButton markdownUrl={markdownUrl}>
-            复制 Markdown
+            复制全文
           </MarkdownCopyButton>
           <DocAuthors authors={frontmatter.author} />
         </div>

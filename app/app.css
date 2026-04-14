@@ -1,3 +1,56 @@
 @import 'tailwindcss';
 @import 'fumadocs-ui/css/neutral.css';
 @import 'fumadocs-ui/css/preset.css';
+
+:root {
+  --color-fd-foreground: hsl(0 0% 18%);
+  --color-fd-muted-foreground: hsl(0 0% 42%);
+}
+
+.dark {
+  --color-fd-foreground: hsl(0 0% 84%);
+  --color-fd-muted-foreground: hsl(0 0% 66%);
+}
+
+.prose {
+  --tw-prose-body: color-mix(
+    in oklab,
+    var(--color-fd-foreground) 72%,
+    transparent
+  );
+  --tw-prose-lead: color-mix(
+    in oklab,
+    var(--color-fd-foreground) 67%,
+    transparent
+  );
+  --tw-prose-headings: color-mix(
+    in oklab,
+    var(--color-fd-foreground) 96%,
+    transparent
+  );
+  --tw-prose-links: color-mix(
+    in oklab,
+    var(--color-fd-foreground) 94%,
+    transparent
+  );
+  --tw-prose-bold: color-mix(
+    in oklab,
+    var(--color-fd-foreground) 98%,
+    transparent
+  );
+  --tw-prose-quotes: color-mix(
+    in oklab,
+    var(--color-fd-foreground) 84%,
+    transparent
+  );
+  --tw-prose-code: color-mix(
+    in oklab,
+    var(--color-fd-foreground) 92%,
+    transparent
+  );
+  --tw-prose-captions: color-mix(
+    in oklab,
+    var(--color-fd-muted-foreground) 90%,
+    transparent
+  );
+}
