@@ -1,8 +1,8 @@
 {
-  "title": "OS 2026 Spring",
-  "description": "2026 年春季学期操作系统课程笔记与实验文档。",
+  "title": "OS 2026 春季",
+  "description": "学期操作系统实验文档",
   "color": "#6ee7b7",
   "icon": "BookOpen",
   "root": true,
-  "pages": ["index", "workflow"]
+  "pages": ["index", "---核心实验---", "exp-3"]
 }
