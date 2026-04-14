@@ -1,0 +1,13 @@
+# runtime dependencies
+node_modules
+
+# development
+/.react-router/
+/build/
+.source
+
+# preferences
+/.vscode
+
+# os-related
+.DS_Store
