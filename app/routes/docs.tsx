@@ -26,7 +26,7 @@ export async function loader({ params }: Route.LoaderArgs) {
   return {
     path: page.path,
     url: page.url,
-    markdownUrl: getPageMarkdownUrl(page).url,
+    markdownUrl: getPageMarkdownUrl(page),
     pageTree: await source.serializePageTree(source.getPageTree()),
   }
 }
@@ -73,7 +73,7 @@ export default function Page({ loaderData }: Route.ComponentProps) {
       }
     >
       <DocsLayout
-        {...baseOptions()}
+        {...baseOptions}
         tree={pageTree}
         tabs={{
           transform(option, node) {
@@ -84,11 +84,7 @@ export default function Page({ loaderData }: Route.ComponentProps) {
               icon: option.icon ? (
                 <div
                   className="[&_svg]:size-full rounded-lg size-full text-(--tab-color) max-md:bg-(--tab-color)/10 max-md:border max-md:p-1.5"
-                  style={
-                    {
-                      '--tab-color': color,
-                    } as React.CSSProperties
-                  }
+                  style={{ '--tab-color': color } as React.CSSProperties}
                 >
                   {option.icon}
                 </div>

@@ -5,20 +5,26 @@ import { buttonVariants } from 'fumadocs-ui/components/ui/button'
 
 type AuthorsValue = string | string[] | undefined
 
-type GithubUser = {
-  login: string
-  name: string | null
-  avatar_url: string
+type AuthorChipState = {
+  displayName: string
+  showAvatar: boolean
 }
 
-function getGithubUser(username: string) {
-  return fetch(`https://api.github.com/users/${username}`)
-    .then(async (response) => {
-      if (!response.ok) return null
-      const data = (await response.json()) as GithubUser
-      return data
+type GithubUser = {
+  name: string | null
+}
+
+async function getGithubUser(username: string, signal: AbortSignal) {
+  try {
+    const response = await fetch(`https://api.github.com/users/${username}`, {
+      signal,
     })
-    .catch(() => null)
+    if (!response.ok) return null
+
+    return (await response.json()) as GithubUser
+  } catch {
+    return null
+  }
 }
 
 function preloadImage(src: string) {
@@ -31,37 +37,50 @@ function preloadImage(src: string) {
   })
 }
 
+async function getAuthorChipState(
+  username: string,
+  avatarSrc: string,
+  signal: AbortSignal,
+): Promise<AuthorChipState> {
+  const [user, showAvatar] = await Promise.all([
+    getGithubUser(username, signal),
+    preloadImage(avatarSrc),
+  ])
+
+  return {
+    displayName: user?.name?.trim() || username,
+    showAvatar,
+  }
+}
+
 function AuthorChip({ username }: { username: string }) {
   const avatarSrc = `https://github.com/${username}.png?size=40`
-  const [displayName, setDisplayName] = useState(username)
-  const [showAvatar, setShowAvatar] = useState(false)
-  const [ready, setReady] = useState(false)
+  const [author, setAuthor] = useState<AuthorChipState>()
 
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
+    let stale = false
 
-    void Promise.allSettled([
-      getGithubUser(username),
-      preloadImage(avatarSrc),
-    ]).then(([userResult, avatarResult]) => {
-      if (cancelled) return
+    async function loadAuthor() {
+      const nextAuthor = await getAuthorChipState(
+        username,
+        avatarSrc,
+        controller.signal,
+      )
 
-      const user =
-        userResult.status === 'fulfilled' ? userResult.value : null
-      const avatarLoaded =
-        avatarResult.status === 'fulfilled' ? avatarResult.value : false
+      if (!stale) setAuthor(nextAuthor)
+    }
 
-      setDisplayName(user?.name?.trim() || username)
-      setShowAvatar(avatarLoaded)
-      setReady(true)
-    })
+    setAuthor(undefined)
+    void loadAuthor()
 
     return () => {
-      cancelled = true
+      stale = true
+      controller.abort()
     }
   }, [avatarSrc, username])
 
-  if (!ready) return null
+  if (!author) return null
 
   return (
     <span
@@ -71,7 +90,7 @@ function AuthorChip({ username }: { username: string }) {
         className: 'overflow-hidden',
       })}
     >
-      {showAvatar ? (
+      {author.showAvatar ? (
         <img
           src={avatarSrc}
           alt={`${username} avatar`}
@@ -83,7 +102,7 @@ function AuthorChip({ username }: { username: string }) {
         />
       ) : null}
       <span className="truncate">
-        {displayName} ({username})
+        {author.displayName} ({username})
       </span>
     </span>
   )

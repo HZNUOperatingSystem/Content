@@ -1,18 +1,19 @@
 import { findPath, type Folder, type Root } from 'fumadocs-core/page-tree'
 
-export function getNodeColor(node: Folder | Root | undefined) {
-  if (!node) return undefined
+type ColoredNode = (Folder | Root) & { color?: string }
 
-  const color = Reflect.get(node as object, 'color')
-  return typeof color === 'string' ? color : undefined
+export function getNodeColor(node: Folder | Root | undefined) {
+  return (node as ColoredNode | undefined)?.color
 }
 
 export function getPageColor(tree: Root, url: string | undefined) {
   if (!url) return getNodeColor(tree)
 
   const path =
-    findPath(tree.children, (node) => node.type === 'page' && node.url === url) ??
-    []
+    findPath(
+      tree.children,
+      (node) => node.type === 'page' && node.url === url,
+    ) ?? []
 
   for (let index = path.length - 1; index >= 0; index -= 1) {
     const node = path[index]

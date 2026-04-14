@@ -1,15 +1,14 @@
-import type { Route } from './+types/not-found'
 import { HomeLayout } from 'fumadocs-ui/layouts/home'
 import { baseOptions } from '@/lib/layout.shared'
 import { Link } from 'react-router'
 
-export function meta({}: Route.MetaArgs) {
+export function meta() {
   return [{ title: '页面未找到' }]
 }
 
 export default function NotFound() {
   return (
-    <HomeLayout {...baseOptions()}>
+    <HomeLayout {...baseOptions}>
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4 px-6 py-16">
         <h1 className="text-3xl font-semibold text-fd-foreground">
           页面未找到
