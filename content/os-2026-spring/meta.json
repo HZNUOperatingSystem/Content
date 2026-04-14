@@ -4,5 +4,5 @@
   "color": "#6ee7b7",
   "icon": "BookOpen",
   "root": true,
-  "pages": ["index", "---核心实验---", "exp-3"]
+  "pages": ["index", "---核心实验---", "exp-3", "---支线实验---", "ss-1"]
 }
