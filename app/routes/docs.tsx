@@ -37,7 +37,7 @@ const clientLoader = browserCollections.docs.createClientLoader({
         <p className="text-lg text-fd-muted-foreground mb-2">
           {frontmatter.description}
         </p>
-        <div className="mb-6 flex flex-row items-center gap-2 border-b border-fd-border pb-4">
+        <div className="flex flex-row items-center gap-2 border-b border-fd-border pb-4">
           <MarkdownCopyButton markdownUrl={markdownUrl} />
         </div>
         <DocsBody>
