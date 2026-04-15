@@ -3,7 +3,8 @@ title: 第四章 · 并行流水线
 description: 用你的线程池驱动图像处理流水线
 ---
 
-## 你的任务
+<LabNote>
+
 
 跟随 `main.c` 中 `TODO` 注释的指引：
 
@@ -11,6 +12,13 @@ description: 用你的线程池驱动图像处理流水线
 2. **派发任务**：写个循环，把每张图的 `BatchTask` 准备好，通过 `submit` 丢给线程池。
 3. **等待**：调用 `thread_pool_wait` 等待所有打工线程把活干完。
 4. **退出**：调用 `thread_pool_destroy` 回收资源。
+
+**提交作业时, 需要将 `src/ch4/main.c` 和其他实验的代码放在同一个文件夹中. 并把 `src/ch4/main.c` 命名为 "ch4_main.c".**
+
+**同时需要将 `output/ch4/metrics.csv` 放在同一个文件夹内, 文件名为 `metrics.csv`.**
+
+</LabNote>
+
 
 <Callout title="扩展玩法：自定义 Config" type="idea">
 

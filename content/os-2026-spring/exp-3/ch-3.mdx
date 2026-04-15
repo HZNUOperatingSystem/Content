@@ -316,6 +316,15 @@ int main() {
 
 </Callout>
 
+<LabNote>
+
+在 `src/ch3/thread_pool.c` 中，我们已经帮你搭好了骨架，并在关键的地方留下了 `TODO` 注释。
+
+跟随 `TODO` 指引, 使用 `pthread` 中关于 `Mutex` 以及 `信号量` 的相关 API 完成线程池的设计与实现.
+
+放心, 我们有详细的步骤指导! 坚持就是胜利!
+
+</LabNote>
 ### wait 与 while
 
 条件变量**必须**和互斥锁搭配使用！这是初学者最容易栽跟头的地方。
@@ -358,6 +367,16 @@ task.fn(task.arg); // [!code focus]
 
 这就是所谓的**虚假唤醒 (Spurious Wakeup)**。你被叫醒了，但不代表轮到你拿锁的时候，条件依旧满足（任务还在）。
 所以，A 醒来后的第一件事，必须用 `while` 循环再看一眼：队列还是空的吗？如果是，那就得乖乖回去接着睡。这就让 `while` 循环成为了逻辑上的必然，而不是死记硬背的规则。
+
+<LabNote>
+
+在线程池中, 你需要实现:
+1. **`thread_pool_worker`**：实现工作线程的逻辑。安全地等待任务、取出任务，修改 `queue_size` / `queue_head` / `working_count`，并在干完活后发送信号更新状态。
+2. **`thread_pool_submit`**：实现主线程提交任务的逻辑。安全地把新任务塞进环形队列尾部（更新 `queue_tail` 和 `queue_size`），并唤醒睡眠的工作线程。
+3. **`thread_pool_wait`**：让主线程在这里乖乖等所有的任务都被处理完。
+4. **`thread_pool_destroy`**：安全下班！通知所有线程退出，并用 `pthread_join` 回收它们。
+
+</LabNote>
 
 <Callout title="核心观点 · while 循环" type="warn">
 
@@ -443,6 +462,11 @@ pthread_mutex_lock(&lock_1);       // 等待 lock_1，但 A 拿着它 // [!code 
 
 线程 A 拿着锁 1 等锁 2，线程 B 拿着锁 2 等锁 1。两个人互相等对方先松手，谁也不肯让步——**程序永远卡死**，没有任何报错，没有任何崩溃，就是纹丝不动。这就是死锁最恐怖的地方：**程序卡死，难以被察觉**。
 
+<LabNote>
+
+在 `pthread_pool` 的实验中, 不要忘记调用 `pthread_mutex_unlock` 释放锁, 避免造成死锁.
+
+</LabNote>
 **Coffman 四条件**
 
 1965 年，Edward Coffman 证明了死锁发生必须**同时满足以下四个条件**：
@@ -485,16 +509,12 @@ pthread_mutex_lock(&lock_1);       // 等待 lock_1，但 A 拿着它 // [!code 
 
 ---
 
-### 你的任务 (TODO)
 
-在 `src/ch3/thread_pool.c` 中，我们已经帮你搭好了骨架，并在关键的地方留下了 `TODO` 注释。
+<LabNote>
 
-你需要完成：
+**提交作业时, 需要将 `src/ch3/thread_pool.c` 和其他实验的代码放在同一个文件夹中, 命名为 "ch3_thread_pool.c".**
 
-1. **`thread_pool_worker`**：实现工作线程的逻辑。安全地等待任务、取出任务，修改 `queue_size` / `queue_head` / `working_count`，并在干完活后发送信号更新状态。
-2. **`thread_pool_submit`**：实现主线程提交任务的逻辑。安全地把新任务塞进环形队列尾部（更新 `queue_tail` 和 `queue_size`），并唤醒睡眠的工作线程。
-3. **`thread_pool_wait`**：让主线程在这里乖乖等所有的任务都被处理完。
-4. **`thread_pool_destroy`**：安全下班！通知所有线程退出，并用 `pthread_join` 回收它们。
+</LabNote>
 
 <Callout title="卡住了？" type="idea">
 
