@@ -79,3 +79,39 @@
 .prose :where([data-accordion-value] > button:first-of-type) {
   color: inherit;
 }
+
+.lab-todo-overlay {
+  transition:
+    opacity 220ms ease,
+    backdrop-filter 220ms ease;
+}
+
+.lab-todo-overlay-open {
+  opacity: 1;
+}
+
+.lab-todo-overlay-closed {
+  opacity: 0;
+}
+
+.lab-todo-panel {
+  transition:
+    transform 220ms ease,
+    opacity 220ms ease;
+}
+
+.lab-todo-panel-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.lab-todo-panel-closed {
+  opacity: 0;
+  transform: translateY(18px) scale(0.985);
+}
+
+@media (min-width: 640px) {
+  .lab-todo-panel-closed {
+    transform: translateY(10px) scale(0.985);
+  }
+}

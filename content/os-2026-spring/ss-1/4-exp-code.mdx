@@ -5,7 +5,7 @@ description: 使用参考代码训练模型，并改进模型性能
 
 import { File, Folder, Files } from 'fumadocs-ui/components/files'
 
-<Callout title="使用大语言模型" type="warn">
+<Callout title="使用大语言模型" type="idea">
 
 如果你遇到了麻烦，请学会向**大语言模型**求助，使用类似 [Cursor](https://cursor.com/)、[Trae](https://www.trae.ai/)、[Trae CN](https://www.trae.cn/)、[Claude Code](https://claude.com/product/claude-code)、[Kimi Code](https://www.kimi.com/code)、[Codex](https://openai.com/codex/) 等工具可以获得**强得多**的编程智能。
 
@@ -214,4 +214,105 @@ uv run fw.py infer runs/X # 换成你的文件夹编号
 uv run fw.py onnx-export runs/X # 换成你的文件夹编号
 ```
 
-你可以使用 `--precision` 参数控制导出的**精度**；其中，`int8` 导出精度可能会对你完成**附加**的在手机上部署模型的实验。
+你可以使用 `--precision` 参数控制导出的**精度**；其中，`int8` 导出精度可能会对你完成**附加**的在手机上部署模型的实验有所帮助。
+
+## 训练循环代码解读
+
+以下部分包含对**参考代码库**核心的解读，其使用了非常常见的 **PyTorch** 项目模式，对构建其他**类似项目**有较好的学习价值。
+
+### 启动设置
+
+源码文件夹下的 `train.py` 负责整个模型的**训练**任务，**模型**训练的**控制**从 `train_model()` 函数开始，首先是基本的**启动设置**部分。
+
+```py lineNumbers=60
+def train_model(
+    config: TrainConfig, *, device: torch.device | None = None
+) -> Path:
+    set_seed(config.seed) # [!code highlight]
+    training_device = device if device is not None else get_device() # [!code highlight]
+```
+
+- 设置一个随机数**种子**，用于可靠的**复现**结果；这是因为在 **PyTorch** 初始化**张量**、**优化器**等大量的地方使用了**伪随机数**，这也是模型**多样性**的一个由来。
+- 找到一个合适的**设备**，我们会在之后**复用**这个值；**一般**情况，我们需要把训练时的**参数张量**、**数据**等需要使用到的内容搬运到**同一个设备上**。
+
+### 数据集构建
+
+接着，我们需要**构建**运行时**数据集**，这里我们使用了一个在 `dataset.py` 定义的一个**帮助函数** `create_dataset()` 来使用**统一**函数创建**训练集**和**验证集**。
+
+```py lineNumbers
+# [!code word:create_dataset]
+train_dataset, train_summary = create_dataset(
+    config.train_manifest,
+    color_mode=config.color_mode,
+    patch_size=config.patch_size, # [!code highlight]
+    build_mode=(
+        'patch-grid' if config.patch_size is not None else 'full-image' # [!code highlight]
+    ),
+)
+val_dataset, val_summary = create_dataset(
+    config.val_manifest,
+    color_mode=config.color_mode,
+    build_mode='full-image',
+)
+```
+
+这里的 `patch_size` 是和**卷积神经网络**息息相关的一个**数据切分**的概念，感兴趣的同学**可以向大模型**询问，<Spoiler>或等待上一篇 CNN 的文章鸽出来</Spoiler>。
+
+你可以使用 **LSP** 跳转到这个**帮助函数**的定义位置，其实现了一个**带缓存**的**数据加载器**；对于**数据集**而言，我们只需要关心 `dataset.py` 中的 `ImageRestorationDataset` 类即可。
+
+```py lineNumbers=28
+class ImageRestorationDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
+```
+
+一个 **PyTorch** 数据集需要**继承** `torch.utils.data.Dataset` 类，并实现关键**方法**。
+
+```py lineNumbers=37
+def __len__(self) -> int: # [!code highlight]
+    return len(self.samples)
+
+def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]: # [!code highlight]
+    sample = self.samples[index]
+    pair = self.pairs[sample.pair_index]
+    if sample.top is None or sample.left is None or sample.size is None:
+        return pair.source, pair.target
+
+    top = sample.top
+    left = sample.left
+    bottom = top + sample.size
+    right = left + sample.size
+    return (
+        pair.source[:, top:bottom, left:right],
+        pair.target[:, top:bottom, left:right],
+    )
+```
+
+这里的两个**方法**分别表示了你打算如何让 **PyTorch** 知道你的**数据集**有多大，以及如何从你的**数据集**里获取数据；通过这样的方法，**PyTorch** 就可以**不关心**你数据集实际上的格式、构造甚至存放的位置，只要你能给它返回**张量**，它就可以接受；从而实现**解耦**。
+
+### 数据加载器
+
+接着我们要实现一个**数据加载器（Data Loader）**，让 **PyTorch** 可以正式引入数据。
+
+```py lineNumbers=93
+loaders = build_training_loaders( # [!code highlight]
+    train_dataset=train_dataset,
+    val_dataset=val_dataset,
+    config=config,
+    train_has_mixed_resolution=train_summary.has_mixed_resolution,
+    device=training_device,
+)
+```
+
+这一样是一个参考代码里的**帮助函数**，我们通过 **LSP** 进行两次跳转就可以找到 `training_setup.py` 中的 `create_loader()` 函数，里面返回的**类** `DataLoader` 正是 **PyTorch** 要求的类型。
+
+```py lineNumbers=98
+return DataLoader(
+    dataset,
+    batch_size=batch_size, # [!code highlight]
+    shuffle=shuffle, # [!code highlight]
+    num_workers=num_workers,
+    persistent_workers=num_workers > 0,
+    pin_memory=device.type == 'cuda',
+)
+```
+
+`Dataset` 描述类如何取 **1** 个数据，而 `DataLoader` 用于定义从**数据集**中取数据的某种**策略**。这里的 `batch_size` 代表了一批次取的数据量，取的数据越多，对 **VRAM** 的占用就越大，但同时，训练需要的**批数**就越少。`shuffle` 控制用于告诉数据加载器是否**打乱**数据，这可以有效防止**学习数据的顺序**对**模型**产生影响，并使得我们难以**排除**干扰。

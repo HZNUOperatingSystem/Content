@@ -12,6 +12,10 @@ import { useFumadocsLoader } from 'fumadocs-core/source/client'
 import { useMDXComponents } from '@/components/mdx'
 import { getNodeColor, getPageColor } from '@/lib/navigation'
 import { DocAuthors } from '@/components/doc-authors'
+import {
+  CollectFloatingButton,
+  CollectProvider,
+} from '@/components/page-collect'
 import type { ColorScheme } from '@/lib/source'
 
 export async function loader({ params }: Route.LoaderArgs) {
@@ -73,39 +77,42 @@ export default function Page({ loaderData }: Route.ComponentProps) {
   const pageColor = getPageColor(pageTree, url)
 
   return (
-    <div
-      className={pageColor ? 'docs-theme-color' : undefined}
-      style={getThemeColorStyle(pageColor, '--docs-page-color')}
-    >
-      <DocsLayout
-        {...baseOptions}
-        tree={pageTree}
-        tabs={{
-          transform(option, node) {
-            const color = getNodeColor(node)
-
-            return {
-              ...option,
-              icon: option.icon ? (
-                <div
-                  className="docs-tab-color [&_svg]:size-full rounded-lg size-full text-(--tab-color) max-md:bg-(--tab-color)/10 max-md:border max-md:p-1.5"
-                  style={
-                    getThemeColorStyle(color, '--tab-color') ??
-                    ({
-                      '--tab-color-light': 'var(--color-fd-foreground)',
-                      '--tab-color-dark': 'var(--color-fd-foreground)',
-                    } as React.CSSProperties)
-                  }
-                >
-                  {option.icon}
-                </div>
-              ) : undefined,
-            }
-          },
-        }}
+    <CollectProvider pageKey={path}>
+      <div
+        className={pageColor ? 'docs-theme-color' : undefined}
+        style={getThemeColorStyle(pageColor, '--docs-page-color')}
       >
-        {clientLoader.useContent(path, { markdownUrl })}
-      </DocsLayout>
-    </div>
+        <DocsLayout
+          {...baseOptions}
+          tree={pageTree}
+          tabs={{
+            transform(option, node) {
+              const color = getNodeColor(node)
+
+              return {
+                ...option,
+                icon: option.icon ? (
+                  <div
+                    className="docs-tab-color [&_svg]:size-full rounded-lg size-full text-(--tab-color) max-md:bg-(--tab-color)/10 max-md:border max-md:p-1.5"
+                    style={
+                      getThemeColorStyle(color, '--tab-color') ??
+                      ({
+                        '--tab-color-light': 'var(--color-fd-foreground)',
+                        '--tab-color-dark': 'var(--color-fd-foreground)',
+                      } as React.CSSProperties)
+                    }
+                  >
+                    {option.icon}
+                  </div>
+                ) : undefined,
+              }
+            },
+          }}
+        >
+          {clientLoader.useContent(path, { markdownUrl })}
+        </DocsLayout>
+        <CollectFloatingButton />
+      </div>
+    </CollectProvider>
   )
 }
