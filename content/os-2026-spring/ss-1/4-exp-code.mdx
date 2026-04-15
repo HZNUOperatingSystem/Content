@@ -316,3 +316,189 @@ return DataLoader(
 ```
 
 `Dataset` 描述类如何取 **1** 个数据，而 `DataLoader` 用于定义从**数据集**中取数据的某种**策略**。这里的 `batch_size` 代表了一批次取的数据量，取的数据越多，对 **VRAM** 的占用就越大，但同时，训练需要的**批数**就越少。`shuffle` 控制用于告诉数据加载器是否**打乱**数据，这可以有效防止**学习数据的顺序**对**模型**产生影响，并使得我们难以**排除**干扰。
+
+### 模型
+
+接下来的几行我们**创建**了一个**模型**，并把它**搬运**到我们的目标设备上；因为这些代码目前是运行在 **CPU** 上的，所以一开始这些**模型参数**是存储在**内存**中的，我们需要把它们搬运到**显存（VRAM）**，才可以让显卡训练。
+
+```py lineNumbers=127
+model = CNNFilter(
+    in_channels=color_mode_channels(config.color_mode)
+    # [!code word:to]
+).to(training_device)
+```
+
+接着我们粗略看一下**模型**的结构。
+
+```py lineNumbers=54
+class CNNFilter(nn.Module):
+    def __init__(
+        self,
+        in_channels: int = 3,
+        base_channels: int = 64,
+        num_blocks: int = 8,
+    ) -> None:
+        super().__init__()
+        self.input_conv = nn.Conv2d( # [!code highlight]
+            in_channels,
+            base_channels,
+            kernel_size=3,
+            padding=1,
+        )
+        self.blocks = nn.Sequential(
+            *[ResidualBlock(base_channels) for _ in range(num_blocks)] # [!code highlight]
+        )
+        self.output_conv = nn.Conv2d( # [!code highlight]
+            base_channels,
+            in_channels,
+            kernel_size=3,
+            padding=1,
+        )
+        self.apply(_init_weights)
+        nn.init.zeros_(self.output_conv.weight)
+        if self.output_conv.bias is not None:
+            nn.init.zeros_(self.output_conv.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        residual = x
+        x = self.input_conv(x) # [!code highlight]
+        x = self.blocks(x) # [!code highlight]
+        x = self.output_conv(x) # [!code highlight]
+        return torch.clamp(x + residual, 0.0, 1.0)
+
+```
+
+从 `forward()` 前向传播可以看出，我们的网络首先是一个**二维卷积**，提升**通道数**；接着是一堆称为 `ResidualBlock` 的叫做**残差块**的隐藏层，最后是一个和第一个卷积镜像的**二维卷积**。接着，我们可以找到 `ResidualBlock` 块的代码。
+
+```py lineNumbers=19
+class ResidualBlock(nn.Module):
+    def __init__(self, channels: int) -> None:
+        super().__init__()
+        self.conv1 = nn.Conv2d( # [!code highlight]
+            channels,
+            channels,
+            kernel_size=3,
+            padding=1,
+            bias=False,
+        )
+        self.bn1 = nn.BatchNorm2d(channels) # [!code highlight]
+        self.gelu = nn.GELU() # [!code highlight]
+        self.conv2 = nn.Conv2d( # [!code highlight]
+            channels,
+            channels,
+            kernel_size=3,
+            padding=1,
+            bias=False,
+        )
+        self.bn2 = nn.BatchNorm2d(channels) # [!code highlight]
+        self._init_residual_scale()
+
+    def _init_residual_scale(self) -> None:
+        nn.init.zeros_(self.conv2.weight)
+```
+
+参考代码里**残差块**的配置是 Conv -> BN -> GELU -> Conv -> BN，并在如下**前向传播**中进行残差连接（**ResNet** 风格）。
+
+```py lineNumbers=44
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        residual = x
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.gelu(x)
+        x = self.conv2(x)
+        x = self.bn2(x)
+        return x + residual # 残差连接 # [!code highlight]
+```
+
+### Loss、LR 规划器、优化器
+
+在 `train.py` 接下来的 `build_training_components()` 中，我们设置了在之前的章节谈论过的「**Loss 函数**」、「**优化器**」和一个比较陌生的概念「**学习率规划器**」。
+
+```py lineNumbers=68
+criterion = nn.MSELoss() # [!code highlight]
+optimizer = torch.optim.AdamW( # [!code highlight]
+    model.parameters(),
+    lr=lr,
+    betas=(0.9, 0.999),
+    eps=1e-8,
+    weight_decay=1e-4,
+)
+```
+
+```py lineNumbers=142
+return OneCycleLR( # [!code highlight]
+    optimizer,
+    max_lr=lr,
+    total_steps=total_steps,
+    pct_start=0.3,
+    div_factor=div_factor,
+    final_div_factor=initial_lr / lr_min,
+    anneal_strategy='cos',
+)
+```
+
+有兴趣的同学请自行跟**大语言模型**询问并了解「**学习率优化器（LR Scheduler）**」以及这里 **AdamW** 优化器及 **MSE Loss** 的相关知识。
+
+### 核心训练循环
+
+接下来是跟**前向传播**和**反向传播**相关的代码，也是**模型**进行**学习**的核心，所有我们谈论过的**概念**都汇聚在此。
+
+```py lineNumbers=37
+def train_epoch(
+    model: nn.Module,
+    loader: DataLoader,
+    train_state: TrainStepState,
+    device: torch.device,
+) -> float:
+    model.train() # 将模型调整为训练模式，允许参数学习 # [!code highlight]
+    total_loss = 0.0
+    sample_count = 0
+    for low_batch, high_batch in progress(loader, desc='train'):
+        low, high = low_batch.to(device), high_batch.to(device) # 取数据
+        train_state.optimizer.zero_grad(set_to_none=True) # 清除累计梯度
+        pred = model(low) # 前向传播 # [!code highlight]
+        loss = train_state.criterion(pred, high) # 计算损失 # [!code highlight]
+        loss.backward() # 反向传播 # [!code highlight]
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        train_state.optimizer.step() # 步进优化器
+        train_state.scheduler.step() # 步进规划器
+        total_loss += loss.item() * low.shape[0] # 累计组内 Loss
+        sample_count += low.shape[0]
+    return total_loss / sample_count
+```
+
+<Callout title='询问大语言模型' type="idea">
+
+这是**信息量**最大的一段代码，对于这里**看不懂**的概念，你只需要将这部分代码**复制粘贴**，**大语言模型**一定会猜出其他的结构；类似这样带有**明显流程**的代码，最适合和**大语言模型**交流学习。
+
+</Callout>
+
+### 验证
+
+在 `validation.py` 中，`evalute()` 函数包含了我们**验证**模型的逻辑，还记得**验证**吗，这是训练模型的**定期考试**。
+
+```py lineNumbers=30
+def evaluate(
+    self,
+    model: nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+) -> ValidationSummary:
+    model.eval() # 切换模型到评估模式 # [!code highlight]
+    total_loss = 0.0
+    sample_count = 0
+    with torch.no_grad(): # 关闭不必的梯度计算 # [!code highlight]
+        for low_batch, high_batch in progress(loader, desc='val'):
+            low = low_batch.to(device)
+            high = high_batch.to(device)
+            prediction = model(low) # 前向传播 # [!code highlight]
+            loss = self.criterion(prediction, high) # 计算损失 # [!code highlight]
+            total_loss += loss.item() * low.shape[0]
+            sample_count += low.shape[0]
+            self.status_tracker.update(
+                prediction.detach().cpu(),
+                high.detach().cpu(),
+                anchor=low.detach().cpu(),
+                batch_size=low.shape[0],
+            )
+```
