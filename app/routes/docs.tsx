@@ -77,7 +77,7 @@ export default function Page({ loaderData }: Route.ComponentProps) {
   const pageColor = getPageColor(pageTree, url)
 
   return (
-    <LabNoteProvider pageKey={path}>
+    <LabNoteProvider key={path}>
       <div
         className={pageColor ? 'docs-theme-color' : undefined}
         style={getThemeColorStyle(pageColor, '--docs-page-color')}

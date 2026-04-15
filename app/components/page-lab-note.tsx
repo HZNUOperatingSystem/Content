@@ -28,10 +28,7 @@ type LabNoteContextValue = {
   removeEntry: (id: string) => void
 }
 
-type LabNoteProviderProps = {
-  pageKey: string
-  children: ReactNode
-}
+type LabNoteProviderProps = { children: ReactNode }
 
 type LabNoteProps = {
   children: ReactNode
@@ -145,32 +142,43 @@ function LabNoteModal() {
   )
 }
 
-export function LabNoteProvider({ pageKey, children }: LabNoteProviderProps) {
+export function LabNoteProvider({ children }: LabNoteProviderProps) {
   const [entries, setEntries] = useState<LabNoteEntry[]>([])
   const [open, setOpen] = useState(false)
 
-  useEffect(() => {
-    setEntries([])
-    setOpen(false)
-  }, [pageKey])
+  const upsertEntry = useCallback((entry: LabNoteEntry) => {
+    setEntries((prev) => {
+      const current = prev.find((item) => item.id === entry.id)
+      if (
+        current &&
+        current.order === entry.order &&
+        current.children === entry.children
+      ) {
+        return prev
+      }
+
+      return [...prev.filter((item) => item.id !== entry.id), entry].sort(
+        (a, b) => a.order - b.order,
+      )
+    })
+  }, [])
+
+  const removeEntry = useCallback((id: string) => {
+    setEntries((prev) => {
+      const next = prev.filter((item) => item.id !== id)
+      return next.length === prev.length ? prev : next
+    })
+  }, [])
 
   const value = useMemo<LabNoteContextValue>(
     () => ({
       entries,
       open,
       setOpen,
-      upsertEntry(entry) {
-        setEntries((prev) =>
-          [...prev.filter((item) => item.id !== entry.id), entry].sort(
-            (a, b) => a.order - b.order,
-          ),
-        )
-      },
-      removeEntry(id) {
-        setEntries((prev) => prev.filter((item) => item.id !== id))
-      },
+      upsertEntry,
+      removeEntry,
     }),
-    [entries, open],
+    [entries, open, removeEntry, upsertEntry],
   )
 
   return (
@@ -223,9 +231,7 @@ export function LabNote({ children }: LabNoteProps) {
   }, [children, id, removeEntry, upsertEntry])
 
   return (
-    <section
-      className="lab-note-inline not-prose my-4 w-full rounded-xl border bg-fd-card shadow-sm"
-    >
+    <section className="lab-note-inline not-prose my-4 w-full rounded-xl border bg-fd-card shadow-sm">
       <div className="flex items-center border-b border-fd-border px-4 py-2.5">
         <span className="text-xs font-semibold uppercase tracking-[0.16em] text-fd-muted-foreground">
           Lab Note
