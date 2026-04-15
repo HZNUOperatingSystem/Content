@@ -28,6 +28,10 @@
   --tab-color: var(--tab-color-dark, var(--tab-color-light));
 }
 
+.lab-note-inline {
+  border-color: color-mix(in oklab, var(--color-fd-primary) 34%, transparent);
+}
+
 .prose {
   --tw-prose-body: color-mix(
     in oklab,
@@ -78,4 +82,40 @@
 
 .prose :where([data-accordion-value] > button:first-of-type) {
   color: inherit;
+}
+
+.lab-note-overlay {
+  transition:
+    opacity 220ms ease,
+    backdrop-filter 220ms ease;
+}
+
+.lab-note-overlay-open {
+  opacity: 1;
+}
+
+.lab-note-overlay-closed {
+  opacity: 0;
+}
+
+.lab-note-panel {
+  transition:
+    transform 220ms ease,
+    opacity 220ms ease;
+}
+
+.lab-note-panel-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.lab-note-panel-closed {
+  opacity: 0;
+  transform: translateY(18px) scale(0.985);
+}
+
+@media (min-width: 640px) {
+  .lab-note-panel-closed {
+    transform: translateY(10px) scale(0.985);
+  }
 }

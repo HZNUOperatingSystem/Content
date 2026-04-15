@@ -82,7 +82,6 @@ pool->queue_head = (pool->queue_head + 1) % pool->queue_capacity; // [!code high
 
 为了解决这个绝境，前人们发明了一种机制来抵抗这种时序混乱。这种机制就像公共卫生间门上的那个“有人/无人”的标志牌——当你进去后，把牌子翻到“有人”（上锁），如果此时你被“中断”打断去休息了，别人因为拿不到锁，在外面就只能干等（空转或睡眠）；等你回来干完活出来时，再把牌子翻回“无人”（解锁）。
 
-
 <Accordions>
 <Accordion title="CAS 与 Futex — 锁到底怎么造的？">
 
@@ -231,7 +230,6 @@ int main() {
 
 </Callout>
 
-
 <Accordions>
 <Accordion title="生产者 - 消费者模型 (Producer-Consumer Model)">
 
@@ -361,7 +359,6 @@ task.fn(task.arg); // [!code focus]
 这就是所谓的**虚假唤醒 (Spurious Wakeup)**。你被叫醒了，但不代表轮到你拿锁的时候，条件依旧满足（任务还在）。
 所以，A 醒来后的第一件事，必须用 `while` 循环再看一眼：队列还是空的吗？如果是，那就得乖乖回去接着睡。这就让 `while` 循环成为了逻辑上的必然，而不是死记硬背的规则。
 
-
 <Callout title="核心观点 · while 循环" type="warn">
 
 在这里，我们引出并发编程中关于条件变量的另一条**铁律（核心观点）**：
@@ -482,6 +479,7 @@ pthread_mutex_lock(&lock_1);       // 等待 lock_1，但 A 拿着它 // [!code 
 我们的线程池只有一个共享队列，所有线程都得抢同一把锁。当线程数和任务数暴增时，这把锁就成了瓶颈。现代高性能调度器（Go 语言的 Goroutine 调度器、Java 的 `ForkJoinPool`）使用了一种更巧妙的策略：**每个工作线程拥有自己的本地队列**。正常情况下，线程只从自己的队列里拿任务，完全不需要锁！只有当自己的队列空了，才会去**偷 (steal)** 别人队列尾部的任务。
 
 这就是 **Work Stealing 算法**——把锁竞争从"所有人抢一把锁"降低到"偶尔两个人抢一下"，性能直接起飞。
+
 </Accordion>
 </Accordions>
 
@@ -498,11 +496,9 @@ pthread_mutex_lock(&lock_1);       // 等待 lock_1，但 A 拿着它 // [!code 
 3. **`thread_pool_wait`**：让主线程在这里乖乖等所有的任务都被处理完。
 4. **`thread_pool_destroy`**：安全下班！通知所有线程退出，并用 `pthread_join` 回收它们。
 
-
 <Callout title="卡住了？" type="idea">
 
 这可能是你写过的最复杂的 C 语言多线程代码之一了。如果卡住了，多回头看看第四步条件变量配合 `while` 循环的那个例子，想想加锁和解锁的时机。
-
 
 </Callout>
 

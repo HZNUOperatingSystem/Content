@@ -77,6 +77,5 @@ export const source = loader({
 })
 
 export function getPageMarkdownUrl(page: { slugs: string[] }) {
-  const prefix = docsContentRoute === '/' ? '' : docsContentRoute
-  return `${prefix}/${[...page.slugs, 'content.md'].join('/')}`
+  return `${docsContentRoute}/${[...page.slugs, 'content.md'].join('/')}`
 }

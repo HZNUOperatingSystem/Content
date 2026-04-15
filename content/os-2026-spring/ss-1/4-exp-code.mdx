@@ -1,0 +1,504 @@
+---
+title: 实验过程与代码解析
+description: 使用参考代码训练模型，并改进模型性能
+---
+
+import { File, Folder, Files } from 'fumadocs-ui/components/files'
+
+<Callout title="使用大语言模型" type="idea">
+
+如果你遇到了麻烦，请学会向**大语言模型**求助，使用类似 [Cursor](https://cursor.com/)、[Trae](https://www.trae.ai/)、[Trae CN](https://www.trae.cn/)、[Claude Code](https://claude.com/product/claude-code)、[Kimi Code](https://www.kimi.com/code)、[Codex](https://openai.com/codex/) 等工具可以获得**强得多**的编程智能。
+
+</Callout>
+
+## 获取参考代码
+
+仓库地址：[HZNUOperatingSystem/SideStory-CNN-Image-Filter](https://github.com/HZNUOperatingSystem/SideStory-CNN-Image-Filter)
+
+本次实验的**模版代码**需要从以上 **GitHub** 仓库中获取，请使用 `git` **命令**或在 GitHub Web 界面**下载**源代码压缩包获取。获取源代码**相关**问题请自行使用**搜索引擎**或**大语言模型**解决。
+
+<Callout title="关于数据集" type="warn">
+
+**SS1** 附带的**数据集**请从钉钉**课程群**中，或**线下**拷贝获得。参考代码的 `data` 目录中包含相关数据集**描述文件**格式，你也可以使用你自己的**数据集**用于训练。但出于公平起见，如果你在**完成实验**部分，尽可能使用课程提供的**数据集**。我们不保证使用**自己**的数据集时的评分。
+
+</Callout>
+
+## 环境设置
+
+请选择以下**对应**的平台查看设置环境的**基本方法**。
+
+<Tabs items={['Linux（包括 WSL）', 'Windows 裸机', 'macOS']}>
+  <Tab value="Linux（包括 WSL）">
+
+不管你是 **Linux** 实体机、**云服务器**还是 **WSL**，你都必须确保你的平台具有 **NVIDIA** 显卡；如果没有，请**不要**强行尝试在 **CPU** 上训练，否则完成实验的周期**会超过**实验提交的期限。你可以在[关于训练](/os-2026-spring/ss-1#关于训练)处查看更多有关信息。
+
+<Callout title="关于 WSL" type="warn">
+
+对于 **WSL2** 而言，你需要使用 **NVIDIA** 官方 **WSL CUDA** 驱动程序**或**配置**显卡直通**；你可以参考[在 WSL 上启用 NVIDIA CUDA](https://learn.microsoft.com/zh-cn/windows/ai/directml/gpu-cuda-in-wsl) 完成配置。
+
+</Callout>
+
+对于非 **WSL** 的 Linux 服务器或实体机，你可以根据你的**发行版**选择合适的包管理器安装 **CUDA** 组件，或下载 **CUDA** 工具包直接安装，对于两种情况，请参考 [CUDA Installation Guide For Linux](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/)，相关问题请使用**大语言模型**解决。
+
+如果你还没有安装 [uv](https://github.com/astral-sh/uv)，请在 **Shell** 中使用以下命令：
+
+```sh
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+  </Tab>
+  <Tab value="Windows 裸机">
+
+你需要确保你的平台具有 **NVIDIA** 显卡；如果没有，请**不要**强行尝试在 **CPU** 上训练，否则完成实验的周期**会超过**实验提交的期限。你可以在[关于训练](/os-2026-spring/ss-1#关于训练)处查看更多有关信息。
+
+对于 **Windows** 系统，你可以参考 [CUDA Installation Guide for Microsoft Windows](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/) 安装 **CUDA** 工具包（直接下载官方安装程序即可）。
+
+如果你还没有安装 [uv](https://github.com/astral-sh/uv)，请在 **Powershell** 中使用以下命令：
+
+```sh
+irm https://astral.sh/uv/install.ps1 | iex
+```
+
+  </Tab>
+  <Tab value="macOS">
+
+<Callout title="关于芯片" type="warn">
+
+你只能使用搭载 **Apple Silicon** 的 **Mac** 进行训练，关于配置要求查看[关于训练](/os-2026-spring/ss-1#关于训练)。
+
+</Callout>
+
+如果你还没有安装 [uv](https://github.com/astral-sh/uv)，请在 **Shell** 中使用以下命令：
+
+```sh
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+  </Tab>
+</Tabs>
+
+## 同步依赖
+
+在你的 **Shell** 中进入你获取的参考代码仓库，执行以下命令。
+
+```sh
+# [!code word:3.12]
+uv sync --python 3.12
+```
+
+<Callout title="关于 Python 版本" type="idea">
+
+不管是完成**本次实验**还是你**最近**想进行的一些其他尝试，请使用 **3.12** 版本以保持稳定。
+
+</Callout>
+
+## 根目录主要结构
+
+使用**命令**或**编辑器**查看项目目录，以下仅列出一些**关键**的路径。
+
+<Files>
+  <Folder name="configs" defaultOpen>
+    <File name="train.toml" />
+    <File name="infer.toml" />
+  </Folder>
+  <Folder name="data" />
+  <Folder name="nn_filter" defaultOpen>
+    <File name="dataset.py" />
+    <File name="infer.py" />
+    <File name="model.py" />
+    <File name="onnx_export.py" />
+    <File name="train.py" />
+    <File name="validation.py" />
+  </Folder>
+  <File name="fw.py" />
+  <File name="pyproject.toml" />
+</Files>
+
+相信阅读了[让机器学会经验](/os-2026-spring/ss-1/1-what-is-ml)和[表示并学习复杂关系](/os-2026-spring/ss-1/2-nn-arch-walkthrough)的同学一眼就可以**猜出**这些代码的作用，这正是**规范化**命名的意义，让分享变得更有效率。没有理解也没有关系，随后的内容将会包含对**这部分代码**的解读。
+
+## 使用 `fw.py`
+
+项目根目录的 `fw.py` 包含了本次实验用到的所有功能的入口，它是一个 [CLI](https://zh.wikipedia.org/wiki/%E5%91%BD%E4%BB%A4%E8%A1%8C%E7%95%8C%E9%9D%A2) 程序，和你日常使用的 `git` 等如出一辙，你可以运行如下代码查看关于**命令行参数**的帮助。
+
+```sh
+uv run fw.py --help
+
+usage: fw.py [-h] COMMAND ...
+
+(HZNU OS Course Lab) Side Story: NN Image Filter
+
+options:
+  -h, --help     show this help message and exit
+
+commands:
+    train        Train the image restoration model.
+    infer        Run model inference.
+    onnx-export  Export a checkpoint to ONNX.
+```
+
+对于每一个具体的命令，你可以在打出命令之后使用 `--help`，这也是一个**规范**，几乎所有的现代 **CLI** 程序都可以使用这个参数来查看帮助。
+
+```sh
+uv run fw.py train --help
+
+usage: fw.py [-h] COMMAND ... infer [-h] [--ckpt CKPT] --input INPUT [--output OUTPUT] [run_dir]
+
+Run model inference.
+
+positional arguments:
+  run_dir          Run directory that contains best.pt and will receive outputs/.
+
+options:
+  -h, --help       show this help message and exit
+  --ckpt CKPT      Checkpoint path to load manually.
+  --input INPUT    Input .datalist.csv, image file, or directory of images.
+  --output OUTPUT  Output directory. Required when using --ckpt.
+```
+
+## 基本操作
+
+### 训练
+
+你可以使用以下**命令**开启训练，它将自动选择**设备**并读取 `configs/train.toml` 文件，根据其中的设置开始训练。
+
+```sh
+uv run train.py
+```
+
+<Callout title="潜在风险" type="warn">
+
+如果你在**云服务器**上训练，请务必使用 [screen](https://www.gnu.org/software/screen/manual/screen.html)、[tmux](https://github.com/tmux/tmux/wiki) 或 [Zellij](https://github.com/zellij-org/zellij) 托管，否则 **SSH** 意外连接断开会导致**训练中断**。
+
+</Callout>
+
+关于 `train.toml` 文件，你可以查看里面的**注释**来了解它们的用途，也可以查看 `config.py` 中的 `TrainConfig` 类并使用 [LSP](https://en.wikipedia.org/wiki/Language_Server_Protocol) 跟踪它的调用来搞清楚**它是怎么被使用**的。
+
+训练的**输出**类似下图所示：
+
+![Train Script Output](https://hznu-os-1302639736.cos.accelerate.myqcloud.com/26-S-SS1/train_terminal_output.webp)
+
+我希望这个**输出**能让你感到没那么害怕，<Spoiler>我刻意没有使用学术圈的风格</Spoiler>，你可以清晰的看到大部分信息，包括这个 **EPOCH**（训练轮数） 的 **Loss**，**学习率**等，总之是一些你已经在[让机器学会经验](/os-2026-spring/ss-1/1-what-is-ml)了解过的东西。
+
+对于下面三行，如果你仔细和 `train.toml` 比对，你会发现那就是其中设置的**指标**，你可以**修改**那个配置文件来隐藏一些指标，或**增加**更多你在意的指标到 `watched_best` 中。
+
+训练完成后，会在项目根的 `runs/` 文件夹下创建一个**数字**名字的文件夹，和你在训练**输出**看到的编号一样，它的结构类似如下：
+
+<Files>
+  <File name="best.pt" />
+  <File name="last.pt" />
+  <File name="nn_filter.tar" />
+  <File name="terminal.log" />
+</Files>
+
+前两个文件是**检查点**（Checkpoint），接着是这次运行时的 `nn_filter` 代码**备份**，最后是终端**日志**，和你在**训练时**看到的相同。
+
+### 推理
+
+你可以使用以下命令在训练之后进行推理。
+
+```sh
+# [!code word:X]
+uv run fw.py infer runs/X # 换成你的文件夹编号
+```
+
+更多其他 `infer` 命令用法可以查看 `--help` 或让 **Agent** 检查代码并告诉你。
+
+在运行时，它会使用 `configs/infer.toml` 配置的**测试集**描述文件，并在随后打出选择的指标的**平均值**；推理的产物存放在 `runs/X/outputs` 下，你可以打开比对。
+
+### 导出 ONNX 检查点
+
+你可以使用以下命令导出 `.onnx` 文件，并将它们**部署**到其他地方运行。
+
+```sh
+# [!code word:X]
+uv run fw.py onnx-export runs/X # 换成你的文件夹编号
+```
+
+你可以使用 `--precision` 参数控制导出的**精度**；其中，`int8` 导出精度可能会对你完成**附加**的在手机上部署模型的实验有所帮助。
+
+## 训练循环代码解读
+
+以下部分包含对**参考代码库**核心的解读，其使用了非常常见的 **PyTorch** 项目模式，对构建其他**类似项目**有较好的学习价值。
+
+### 启动设置
+
+源码文件夹下的 `train.py` 负责整个模型的**训练**任务，**模型**训练的**控制**从 `train_model()` 函数开始，首先是基本的**启动设置**部分。
+
+```py lineNumbers=60
+def train_model(
+    config: TrainConfig, *, device: torch.device | None = None
+) -> Path:
+    set_seed(config.seed) # [!code highlight]
+    training_device = device if device is not None else get_device() # [!code highlight]
+```
+
+- 设置一个随机数**种子**，用于可靠的**复现**结果；这是因为在 **PyTorch** 初始化**张量**、**优化器**等大量的地方使用了**伪随机数**，这也是模型**多样性**的一个由来。
+- 找到一个合适的**设备**，我们会在之后**复用**这个值；**一般**情况，我们需要把训练时的**参数张量**、**数据**等需要使用到的内容搬运到**同一个设备上**。
+
+### 数据集构建
+
+接着，我们需要**构建**运行时**数据集**，这里我们使用了一个在 `dataset.py` 定义的一个**帮助函数** `create_dataset()` 来使用**统一**函数创建**训练集**和**验证集**。
+
+```py lineNumbers
+# [!code word:create_dataset]
+train_dataset, train_summary = create_dataset(
+    config.train_manifest,
+    color_mode=config.color_mode,
+    patch_size=config.patch_size, # [!code highlight]
+    build_mode=(
+        'patch-grid' if config.patch_size is not None else 'full-image' # [!code highlight]
+    ),
+)
+val_dataset, val_summary = create_dataset(
+    config.val_manifest,
+    color_mode=config.color_mode,
+    build_mode='full-image',
+)
+```
+
+这里的 `patch_size` 是和**卷积神经网络**息息相关的一个**数据切分**的概念，感兴趣的同学**可以向大模型**询问，<Spoiler>或等待上一篇 CNN 的文章鸽出来</Spoiler>。
+
+你可以使用 **LSP** 跳转到这个**帮助函数**的定义位置，其实现了一个**带缓存**的**数据加载器**；对于**数据集**而言，我们只需要关心 `dataset.py` 中的 `ImageRestorationDataset` 类即可。
+
+```py lineNumbers=28
+class ImageRestorationDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
+```
+
+一个 **PyTorch** 数据集需要**继承** `torch.utils.data.Dataset` 类，并实现关键**方法**。
+
+```py lineNumbers=37
+def __len__(self) -> int: # [!code highlight]
+    return len(self.samples)
+
+def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]: # [!code highlight]
+    sample = self.samples[index]
+    pair = self.pairs[sample.pair_index]
+    if sample.top is None or sample.left is None or sample.size is None:
+        return pair.source, pair.target
+
+    top = sample.top
+    left = sample.left
+    bottom = top + sample.size
+    right = left + sample.size
+    return (
+        pair.source[:, top:bottom, left:right],
+        pair.target[:, top:bottom, left:right],
+    )
+```
+
+这里的两个**方法**分别表示了你打算如何让 **PyTorch** 知道你的**数据集**有多大，以及如何从你的**数据集**里获取数据；通过这样的方法，**PyTorch** 就可以**不关心**你数据集实际上的格式、构造甚至存放的位置，只要你能给它返回**张量**，它就可以接受；从而实现**解耦**。
+
+### 数据加载器
+
+接着我们要实现一个**数据加载器（Data Loader）**，让 **PyTorch** 可以正式引入数据。
+
+```py lineNumbers=93
+loaders = build_training_loaders( # [!code highlight]
+    train_dataset=train_dataset,
+    val_dataset=val_dataset,
+    config=config,
+    train_has_mixed_resolution=train_summary.has_mixed_resolution,
+    device=training_device,
+)
+```
+
+这一样是一个参考代码里的**帮助函数**，我们通过 **LSP** 进行两次跳转就可以找到 `training_setup.py` 中的 `create_loader()` 函数，里面返回的**类** `DataLoader` 正是 **PyTorch** 要求的类型。
+
+```py lineNumbers=98
+return DataLoader(
+    dataset,
+    batch_size=batch_size, # [!code highlight]
+    shuffle=shuffle, # [!code highlight]
+    num_workers=num_workers,
+    persistent_workers=num_workers > 0,
+    pin_memory=device.type == 'cuda',
+)
+```
+
+`Dataset` 描述类如何取 **1** 个数据，而 `DataLoader` 用于定义从**数据集**中取数据的某种**策略**。这里的 `batch_size` 代表了一批次取的数据量，取的数据越多，对 **VRAM** 的占用就越大，但同时，训练需要的**批数**就越少。`shuffle` 控制用于告诉数据加载器是否**打乱**数据，这可以有效防止**学习数据的顺序**对**模型**产生影响，并使得我们难以**排除**干扰。
+
+### 模型
+
+接下来的几行我们**创建**了一个**模型**，并把它**搬运**到我们的目标设备上；因为这些代码目前是运行在 **CPU** 上的，所以一开始这些**模型参数**是存储在**内存**中的，我们需要把它们搬运到**显存（VRAM）**，才可以让显卡训练。
+
+```py lineNumbers=127
+model = CNNFilter(
+    in_channels=color_mode_channels(config.color_mode)
+    # [!code word:to]
+).to(training_device)
+```
+
+接着我们粗略看一下**模型**的结构。
+
+```py lineNumbers=54
+class CNNFilter(nn.Module):
+    def __init__(
+        self,
+        in_channels: int = 3,
+        base_channels: int = 64,
+        num_blocks: int = 8,
+    ) -> None:
+        super().__init__()
+        self.input_conv = nn.Conv2d( # [!code highlight]
+            in_channels,
+            base_channels,
+            kernel_size=3,
+            padding=1,
+        )
+        self.blocks = nn.Sequential(
+            *[ResidualBlock(base_channels) for _ in range(num_blocks)] # [!code highlight]
+        )
+        self.output_conv = nn.Conv2d( # [!code highlight]
+            base_channels,
+            in_channels,
+            kernel_size=3,
+            padding=1,
+        )
+        self.apply(_init_weights)
+        nn.init.zeros_(self.output_conv.weight)
+        if self.output_conv.bias is not None:
+            nn.init.zeros_(self.output_conv.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        residual = x
+        x = self.input_conv(x) # [!code highlight]
+        x = self.blocks(x) # [!code highlight]
+        x = self.output_conv(x) # [!code highlight]
+        return torch.clamp(x + residual, 0.0, 1.0)
+
+```
+
+从 `forward()` 前向传播可以看出，我们的网络首先是一个**二维卷积**，提升**通道数**；接着是一堆称为 `ResidualBlock` 的叫做**残差块**的隐藏层，最后是一个和第一个卷积镜像的**二维卷积**。接着，我们可以找到 `ResidualBlock` 块的代码。
+
+```py lineNumbers=19
+class ResidualBlock(nn.Module):
+    def __init__(self, channels: int) -> None:
+        super().__init__()
+        self.conv1 = nn.Conv2d( # [!code highlight]
+            channels,
+            channels,
+            kernel_size=3,
+            padding=1,
+            bias=False,
+        )
+        self.bn1 = nn.BatchNorm2d(channels) # [!code highlight]
+        self.gelu = nn.GELU() # [!code highlight]
+        self.conv2 = nn.Conv2d( # [!code highlight]
+            channels,
+            channels,
+            kernel_size=3,
+            padding=1,
+            bias=False,
+        )
+        self.bn2 = nn.BatchNorm2d(channels) # [!code highlight]
+        self._init_residual_scale()
+
+    def _init_residual_scale(self) -> None:
+        nn.init.zeros_(self.conv2.weight)
+```
+
+参考代码里**残差块**的配置是 Conv -> BN -> GELU -> Conv -> BN，并在如下**前向传播**中进行残差连接（**ResNet** 风格）。
+
+```py lineNumbers=44
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        residual = x
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.gelu(x)
+        x = self.conv2(x)
+        x = self.bn2(x)
+        return x + residual # 残差连接 # [!code highlight]
+```
+
+### Loss、LR 规划器、优化器
+
+在 `train.py` 接下来的 `build_training_components()` 中，我们设置了在之前的章节谈论过的「**Loss 函数**」、「**优化器**」和一个比较陌生的概念「**学习率规划器**」。
+
+```py lineNumbers=68
+criterion = nn.MSELoss() # [!code highlight]
+optimizer = torch.optim.AdamW( # [!code highlight]
+    model.parameters(),
+    lr=lr,
+    betas=(0.9, 0.999),
+    eps=1e-8,
+    weight_decay=1e-4,
+)
+```
+
+```py lineNumbers=142
+return OneCycleLR( # [!code highlight]
+    optimizer,
+    max_lr=lr,
+    total_steps=total_steps,
+    pct_start=0.3,
+    div_factor=div_factor,
+    final_div_factor=initial_lr / lr_min,
+    anneal_strategy='cos',
+)
+```
+
+有兴趣的同学请自行跟**大语言模型**询问并了解「**学习率优化器（LR Scheduler）**」以及这里 **AdamW** 优化器及 **MSE Loss** 的相关知识。
+
+### 核心训练循环
+
+接下来是跟**前向传播**和**反向传播**相关的代码，也是**模型**进行**学习**的核心，所有我们谈论过的**概念**都汇聚在此。
+
+```py lineNumbers=37
+def train_epoch(
+    model: nn.Module,
+    loader: DataLoader,
+    train_state: TrainStepState,
+    device: torch.device,
+) -> float:
+    model.train() # 将模型调整为训练模式，允许参数学习 # [!code highlight]
+    total_loss = 0.0
+    sample_count = 0
+    for low_batch, high_batch in progress(loader, desc='train'):
+        low, high = low_batch.to(device), high_batch.to(device) # 取数据
+        train_state.optimizer.zero_grad(set_to_none=True) # 清除累计梯度
+        pred = model(low) # 前向传播 # [!code highlight]
+        loss = train_state.criterion(pred, high) # 计算损失 # [!code highlight]
+        loss.backward() # 反向传播 # [!code highlight]
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        train_state.optimizer.step() # 步进优化器
+        train_state.scheduler.step() # 步进规划器
+        total_loss += loss.item() * low.shape[0] # 累计组内 Loss
+        sample_count += low.shape[0]
+    return total_loss / sample_count
+```
+
+<Callout title='询问大语言模型' type="idea">
+
+这是**信息量**最大的一段代码，对于这里**看不懂**的概念，你只需要将这部分代码**复制粘贴**，**大语言模型**一定会猜出其他的结构；类似这样带有**明显流程**的代码，最适合和**大语言模型**交流学习。
+
+</Callout>
+
+### 验证
+
+在 `validation.py` 中，`evalute()` 函数包含了我们**验证**模型的逻辑，还记得**验证**吗，这是训练模型的**定期考试**。
+
+```py lineNumbers=30
+def evaluate(
+    self,
+    model: nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+) -> ValidationSummary:
+    model.eval() # 切换模型到评估模式 # [!code highlight]
+    total_loss = 0.0
+    sample_count = 0
+    with torch.no_grad(): # 关闭不必的梯度计算 # [!code highlight]
+        for low_batch, high_batch in progress(loader, desc='val'):
+            low = low_batch.to(device)
+            high = high_batch.to(device)
+            prediction = model(low) # 前向传播 # [!code highlight]
+            loss = self.criterion(prediction, high) # 计算损失 # [!code highlight]
+            total_loss += loss.item() * low.shape[0]
+            sample_count += low.shape[0]
+            self.status_tracker.update(
+                prediction.detach().cpu(),
+                high.detach().cpu(),
+                anchor=low.detach().cpu(),
+                batch_size=low.shape[0],
+            )
+```
