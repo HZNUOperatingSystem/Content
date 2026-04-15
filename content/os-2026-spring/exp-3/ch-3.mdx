@@ -307,7 +307,7 @@ for (int i = 0; i < pool->thread_count; ++i) {
 
 `pthread_join` 会让主线程阻塞等在这里，直到对应的线程跑完了最后一行代码彻底退出，主线程才会走向下一个继续等。确认所有线程都安全退出后，正式释放内存，结束程序！
 
-<Accordions>
+<Accordions type="multiple">
 <Accordion title="扩展阅读：死锁 ">
 
 学会了互斥锁和条件变量，你已经掌握了并发编程的两大武器。但在开始写代码之前，必须认识它们最可怕的副作用：**死锁 (Deadlock)**。
