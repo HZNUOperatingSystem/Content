@@ -24,6 +24,9 @@ export default async function Page({ params }: DocsPageProps) {
   if (!page) notFound()
 
   const Mdx = page.data.body
+  const hasAuthors = Array.isArray(page.data.author)
+    ? page.data.author.length > 0
+    : Boolean(page.data.author)
 
   return (
     <LabNoteProvider key={page.path}>
@@ -32,15 +35,22 @@ export default async function Page({ params }: DocsPageProps) {
         <p className="mb-2 text-lg text-fd-muted-foreground">
           {page.data.description}
         </p>
-        <div className="mb-4 flex flex-row flex-wrap items-center gap-2 border-b border-fd-border pb-4">
+        <div className="mb-4 flex flex-row flex-wrap items-start gap-2 border-b border-fd-border pb-4">
           <MarkdownCopyButton markdownUrl={getPageMarkdownUrl(page)}>
             复制全文
           </MarkdownCopyButton>
-          <DocAuthors authors={page.data.author} />
         </div>
         <DocsBody>
           <Mdx components={useMDXComponents()} />
         </DocsBody>
+        {hasAuthors ? (
+          <section className="border-t border-fd-border pt-6 pb-4">
+            <p className="mb-3 text-sm font-medium text-fd-muted-foreground">
+              本文作者
+            </p>
+            <DocAuthors authors={page.data.author} />
+          </section>
+        ) : null}
       </DocsPage>
       <LabNoteFloatingButton />
     </LabNoteProvider>
