@@ -231,13 +231,13 @@ export function LabNote({ children }: LabNoteProps) {
   }, [children, id, removeEntry, upsertEntry])
 
   return (
-    <section className="lab-note-inline not-prose my-4 w-full rounded-xl border bg-fd-card shadow-sm">
-      <div className="flex items-center border-b border-fd-border px-4 py-2.5">
+    <section className="lab-note-inline my-4 w-full overflow-hidden rounded-xl border bg-fd-card shadow-sm">
+      <div className="not-prose flex items-center border-b border-fd-border px-4 py-2.5">
         <span className="text-xs font-semibold uppercase tracking-[0.16em] text-fd-muted-foreground">
           Lab Note
         </span>
       </div>
-      <div className="prose prose-no-margin max-w-none px-4 py-3 text-[var(--tw-prose-body)] text-sm leading-7">
+      <div className="lab-note-inline-content prose-no-margin px-4 py-3">
         {children}
       </div>
     </section>

@@ -32,6 +32,10 @@
   border-color: color-mix(in oklab, var(--color-fd-primary) 34%, transparent);
 }
 
+.lab-note-inline-content {
+  color: var(--tw-prose-body);
+}
+
 .prose {
   --tw-prose-body: color-mix(
     in oklab,
