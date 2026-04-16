@@ -1,50 +1,62 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { buttonVariants } from 'fumadocs-ui/components/ui/button'
 
 type AuthorsValue = string | string[] | undefined
-
-type AuthorChipState = {
-  displayName: string
-  showAvatar: boolean
-}
 
 type GithubUser = {
   name: string | null
 }
 
-async function getGithubUser(username: string, signal: AbortSignal) {
-  try {
-    const response = await fetch(`https://api.github.com/users/${username}`, {
-      signal,
-    })
-    if (!response.ok) return null
-
-    return (await response.json()) as GithubUser
-  } catch {
-    return null
-  }
+type GithubUserCardState = {
+  displayName: string
+  showAvatar: boolean
 }
 
-function preloadImage(src: string) {
-  return new Promise<boolean>((resolve) => {
+const userCache = new Map<string, Promise<GithubUser | null>>()
+const avatarCache = new Map<string, Promise<boolean>>()
+
+async function getGithubUser(username: string, signal: AbortSignal) {
+  const cached = userCache.get(username)
+  if (cached) return cached
+
+  const promise = fetch(`https://api.github.com/users/${username}`, {
+    signal,
+  })
+    .then(async (response) => {
+      if (!response.ok) return null
+      return (await response.json()) as GithubUser
+    })
+    .catch(() => null)
+
+  userCache.set(username, promise)
+  return promise
+}
+
+function preloadAvatar(src: string) {
+  const cached = avatarCache.get(src)
+  if (cached) return cached
+
+  const promise = new Promise<boolean>((resolve) => {
     const image = new Image()
 
     image.onload = () => resolve(true)
     image.onerror = () => resolve(false)
     image.src = src
   })
+
+  avatarCache.set(src, promise)
+  return promise
 }
 
-async function getAuthorChipState(
+async function getGithubUserCardState(
   username: string,
   avatarSrc: string,
   signal: AbortSignal,
-): Promise<AuthorChipState> {
+): Promise<GithubUserCardState> {
   const [user, showAvatar] = await Promise.all([
     getGithubUser(username, signal),
-    preloadImage(avatarSrc),
+    preloadAvatar(avatarSrc),
   ])
 
   return {
@@ -53,26 +65,40 @@ async function getAuthorChipState(
   }
 }
 
-function AuthorChip({ username }: { username: string }) {
-  const avatarSrc = `https://github.com/${username}.png?size=40`
-  const [author, setAuthor] = useState<AuthorChipState>()
+function GithubUserCardSkeleton() {
+  return (
+    <div className="h-16 min-w-[11rem] rounded-xl border border-fd-border bg-fd-card/65 px-3 py-3 shadow-sm">
+      <div className="flex h-full items-center gap-3">
+        <div className="size-10 shrink-0 animate-pulse rounded-full bg-fd-accent" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="h-3.5 w-24 animate-pulse rounded-full bg-fd-accent" />
+          <div className="h-3 w-20 animate-pulse rounded-full bg-fd-accent/80" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function GithubUserCard({ username }: { username: string }) {
+  const avatarSrc = `https://github.com/${username}.png?size=80`
+  const [user, setUser] = useState<GithubUserCardState>()
 
   useEffect(() => {
     const controller = new AbortController()
     let stale = false
 
-    async function loadAuthor() {
-      const nextAuthor = await getAuthorChipState(
+    async function loadUser() {
+      const nextUser = await getGithubUserCardState(
         username,
         avatarSrc,
         controller.signal,
       )
 
-      if (!stale) setAuthor(nextAuthor)
+      if (!stale) setUser(nextUser)
     }
 
-    setAuthor(undefined)
-    void loadAuthor()
+    setUser(undefined)
+    void loadUser()
 
     return () => {
       stale = true
@@ -80,31 +106,43 @@ function AuthorChip({ username }: { username: string }) {
     }
   }, [avatarSrc, username])
 
-  if (!author) return null
+  if (!user) return <GithubUserCardSkeleton />
 
   return (
-    <span
-      className={buttonVariants({
-        color: 'secondary',
-        size: 'sm',
-        className: 'overflow-hidden',
-      })}
+    <a
+      href={`https://github.com/${username}`}
+      target="_blank"
+      rel="noreferrer"
+      className="group block h-16 min-w-[11rem] rounded-xl border border-fd-border bg-fd-card px-3 py-3 shadow-sm transition-all duration-200 hover:border-fd-primary/35 hover:bg-fd-card/90 hover:shadow-md"
     >
-      {author.showAvatar ? (
-        <img
-          src={avatarSrc}
-          alt={`${username} avatar`}
-          className="me-2 size-3.5 shrink-0 rounded-full"
-          loading="lazy"
-          decoding="async"
-          width={14}
-          height={14}
-        />
-      ) : null}
-      <span className="truncate">
-        {author.displayName} ({username})
-      </span>
-    </span>
+      <div className="flex h-full items-center gap-3">
+        <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-fd-accent">
+          {user.showAvatar ? (
+            <img
+              src={avatarSrc}
+              alt={`${username} avatar`}
+              className="size-full object-cover"
+              loading="lazy"
+              decoding="async"
+              width={40}
+              height={40}
+            />
+          ) : (
+            <span className="text-sm font-semibold text-fd-muted-foreground">
+              {username.slice(0, 1).toUpperCase()}
+            </span>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-fd-foreground transition-colors group-hover:text-fd-primary">
+            {user.displayName}
+          </p>
+          <p className="truncate text-xs text-fd-muted-foreground">
+            @{username}
+          </p>
+        </div>
+      </div>
+    </a>
   )
 }
 
@@ -113,10 +151,10 @@ export function DocAuthors({ authors }: { authors: AuthorsValue }) {
   if (items.length === 0) return null
 
   return (
-    <>
+    <div className="flex flex-wrap gap-2">
       {items.map((username) => (
-        <AuthorChip key={username} username={username} />
+        <GithubUserCard key={username} username={username} />
       ))}
-    </>
+    </div>
   )
 }

@@ -1,4 +1,5 @@
 export const siteName = 'HZNU OS Lab'
+export const siteDesc = '杭州师范大学操作系统实验课程文档'
 export const docsRoute = '/'
 export const docsContentRoute = '/api/content'
 export const githubUrl = 'https://github.com/HZNUOperatingSystem'

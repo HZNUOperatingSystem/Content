@@ -1,0 +1,158 @@
+---
+title: 第四章副本 · 加载预训练模型
+description: 一个可能没有 AI 很难，但是会用 AI 则很简单的实验？可以尝试一下！
+author: utakotoba
+---
+
+<Callout title="使用大语言模型" type="idea">
+
+如果你遇到了麻烦，请向**大语言模型**求助，你也可以使用类似 [Cursor](https://cursor.com/)、[Trae](https://www.trae.ai/)、[Trae CN](https://www.trae.cn/)、[Claude Code](https://claude.com/product/claude-code)、[Kimi Code](https://www.kimi.com/code)、[Codex](https://openai.com/codex/) 等工具可以获得**强得多**的编程智能。
+
+</Callout>
+
+在该实验中，你需要比在 **Exp2** 更进一步，你需要直接使用 [ONNX Runtime](https://github.com/microsoft/onnxruntime) 加载预训练的 **CNN** 模型，用于和前几个小实验一样的**滤波**任务。
+
+<Callout title="链接库" type="warn">
+
+本实验仓库样板代码只提供了 **Linux x64** 和 **macOS arm64** 两个版本。
+
+如果你要在 **Windows 裸机**上完成这个实验，你需要访问 [ONNX Runtime Releases](https://github.com/microsoft/onnxruntime/releases) 页面下载对应的库并修改 `Makefile` 和相关文件。
+
+</Callout>
+
+你可以使用**链接**下载预训练模型：[model.fp32.onnx](https://hznu-os-1302639736.cos.accelerate.myqcloud.com/26-S-Exp3/model.fp32.onnx)，或在**线下**拷贝获得。
+
+如果你懒得做这个实验，也可以看看**支线实验**中的[插曲一 · 卷积图像修复网络](/os-2026-spring/ss-1)，<Spoiler>和 OS 没什么关系</Spoiler>。我在其中介绍了**机器学习**和**神经网络**的基本概念，希望你可以有所收获。如果你对理论也不感兴趣，你或许也可以看看**训练代码**的[实验过程与代码解析](/os-2026-spring/ss-1/4-exp-code)，只从代码中就可以学习**训练**神经网络模型**基本的流程**，如果你可以对它（**ResNet**）做出性能改进，你讲可以取得本次实验的**基本满分**。
+
+这部分**没有**和前文一样贴心的教程，<Spoiler>从这开始换人了</Spoiler>，根据任课老师的建议，本部分从原本的**只需要调用一个函数**就能获得 **10** 分，**变成**了一个**相对**复杂的题目。如果你打算**询问 AI**，我强烈建议你使用一个可以自己阅读本地文件的 **IDE** 或者 **CLI**（如本篇开头所说），使用 Web 上的 AI 聊天对本实验可能仍然有一定难度。
+
+## 概览
+
+以下给出一些基本的**提示**和**参考资料**，你可以通过**任何方式**，搜寻，扩充，理解，复用这些内容；除**抄袭**外，方法不限。你也可以比较一下将**参考资料**和基本思路告诉**大语言模型**，相比直接询问有**多大的提升**。
+
+### 定位路径
+
+`src/ch4x/filter_cnn.c`
+
+```c lineNumbers=6
+/**
+ * TODO:
+ * Decide how the program locates the ONNX model file.
+ *
+ * Suggested directions:
+ * - hard-code a repo-relative path while you are experimenting
+ * - keep the path in one place so it is easy to change later
+ * - return NULL when the model path has not been configured yet
+ */
+static const char* cnn_model_path(void) {
+  return NULL;
+}
+```
+
+嗯，没有什么难度的，只需要返回一个**路径**即可。关于这里的「Suggested directions」，可以减少**大语言模型**犯错的概率，事实上，如果你知道一个**修改**的大致方向，你应该明确的和这些 **LLM** 指出。
+
+如果你有很多的想法，你其实可以和大语言模型**讨论**实现之间的好坏，而不是把一个**不好**的直接发给它，并让它自己修改；**和 LLM 聊聊**，或许你还能学到更多。
+
+<LabNote>修改 `filter_cnn.c`，让它可以找到模型文件。</LabNote>
+
+### 创建可复用的 Session
+
+`src/ch4x/onnx_inference.c` 中的 `onnx_session_create()` 函数
+
+```c lineNumbers=41
+session = (OnnxSession*)calloc(1, sizeof(OnnxSession));
+if (session == NULL) {
+  set_last_error("failed to allocate ONNX session");
+  return NULL;
+}
+
+/*
+* TODO:
+* Build the ONNX Runtime session here.
+*
+* A typical implementation needs few steps,
+* you should setup environment, create session,
+* setting device and somehow IO.
+*
+* [!code highlight]
+* You are required to make inference on your CPU.
+*/
+
+set_last_error("TODO: implement onnx_session_create in src/ch4x/onnx_inference.c");
+free(session);
+return NULL;
+```
+
+以下是一些可能的参考资料，如果你**有时间**，可以自行阅读**前两篇**，其中包含了完成这部分代码的**几乎全部**内容；当然，你也可以直接把这两个链接交给 **AI**，取决于你的选择。
+
+- [Get started with ORT for C](https://onnxruntime.ai/docs/get-started/with-c.html)
+- [onnxruntime_c_api.h](https://github.com/microsoft/onnxruntime/blob/main/include/onnxruntime/core/session/onnxruntime_c_api.h)，该文件在 `third_party/onnxruntime` 里也可以找到。
+
+<LabNote>
+
+使用 **ONNX Runtime** 官方库，创建一个用于执行模型**推理**的 **Session**。
+
+</LabNote>
+
+### 从 ImageBuffer 到输入张量
+
+`src/ch4x/onnx_inference.c` 中的 `onnx_run_inference()` 函数
+
+```c lineNumbers=98
+/*
+* TODO:
+* Prepare the input image data for the model and perform inference,
+* then convert the model output back to the output image buffer.
+*
+* You will need to:
+* [!code highlight]
+* - Transform the raw image bytes into the tensor format the model expects
+* - Execute the model using the prepared session
+* [!code highlight]
+* - Extract and post-process the result tensor into 8-bit image data
+*
+* On any error:
+* - Use set_last_error() with a descriptive message
+* - Clean up any temporary resources you allocated
+* - Return -1
+*
+* Keep resource management careful to avoid leaks.
+*/
+
+set_last_error("TODO: implement onnx_run_inference in src/ch4x/onnx_inference.c");
+return -1;
+```
+
+除了**上个**步骤提供的**参考资料**外，再提供一个比较相关的**示例代码**。
+
+- [fns_candy_style_transfer.c](https://github.com/microsoft/onnxruntime-inference-examples/blob/main/c_cxx/fns_candy_style_transfer/fns_candy_style_transfer.c)
+
+你也可以和 **AI** 讨论一些其他的解决方案，或者也可以仔细询问关于**张量格式**的概念？
+
+<Callout title="布局" type="idea">
+
+**HWC**（也叫 NHWC，当加上 Batch 维度时）是最常见的**像素优先**布局：
+
+- 外层是**高度**（Height） → 每一行
+- 中间是**宽度**（Width） → 每一列
+- 最内层是**通道**（Channel），对于 RGB 图像通常是 R、G、B 三个值连续存储
+
+自行了解一下 **CHW** 布局？以及图片到**张量**的转化？
+
+</Callout>
+
+<LabNote>
+
+将 `ImageBuffer` 类型数据调整为适合 ONNX Runtime 加载的数据**结构**（张量）。
+
+</LabNote>
+
+### 评估
+
+**复用**在前几个小实验写的 **SSIM** 代码和 **PSNR** 计算过程，量化模型性能。
+
+<LabNote>
+
+你需要使用在**之前**实验完成的 **SSIM** 及原本的 **PSNR** 指标**评估**它的性能，并计算增益。
+
+</LabNote>

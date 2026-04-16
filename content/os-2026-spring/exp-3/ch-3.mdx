@@ -1,6 +1,7 @@
 ---
 title: 第三章 · 动手写一个线程池
 description: 从函数指针到条件变量，一步步实现多线程调度器
+author: chenty2333
 ---
 
 ## 全新篇章：自己动手写一个线程池！
@@ -181,14 +182,14 @@ int main() {
 
 <Callout title="pthread API 速查" type="info">
 
-| API | 作用 |
-|:---|:---|
-| `pthread_mutex_init(&lock, NULL)` | 初始化一把锁（第二个参数用默认属性即可） |
-| `pthread_mutex_lock(&lock)` | 加锁，抢不到就阻塞等待 |
-| `pthread_mutex_unlock(&lock)` | 解锁，让排队的线程进来 |
-| `pthread_mutex_destroy(&lock)` | 销毁锁，释放资源 |
-| `pthread_create(&tid, NULL, fn, arg)` | 创建线程，让它执行 `fn(arg)` |
-| `pthread_join(tid, NULL)` | 等待线程结束 |
+| API                                   | 作用                                     |
+| :------------------------------------ | :--------------------------------------- |
+| `pthread_mutex_init(&lock, NULL)`     | 初始化一把锁（第二个参数用默认属性即可） |
+| `pthread_mutex_lock(&lock)`           | 加锁，抢不到就阻塞等待                   |
+| `pthread_mutex_unlock(&lock)`         | 解锁，让排队的线程进来                   |
+| `pthread_mutex_destroy(&lock)`        | 销毁锁，释放资源                         |
+| `pthread_create(&tid, NULL, fn, arg)` | 创建线程，让它执行 `fn(arg)`             |
+| `pthread_join(tid, NULL)`             | 等待线程结束                             |
 
 </Callout>
 
@@ -304,13 +305,13 @@ int main() {
 
 <Callout title="pthread 条件变量 API 速查" type="info">
 
-| API | 作用 |
-|:---|:---|
-| `pthread_cond_init(&cond, NULL)` | 初始化条件变量 |
+| API                               | 作用                             |
+| :-------------------------------- | :------------------------------- |
+| `pthread_cond_init(&cond, NULL)`  | 初始化条件变量                   |
 | `pthread_cond_wait(&cond, &lock)` | 释放锁 → 挂起 → 被唤醒后重新加锁 |
-| `pthread_cond_signal(&cond)` | 唤醒**一个**等待中的线程 |
-| `pthread_cond_broadcast(&cond)` | 唤醒**所有**等待中的线程 |
-| `pthread_cond_destroy(&cond)` | 销毁条件变量 |
+| `pthread_cond_signal(&cond)`      | 唤醒**一个**等待中的线程         |
+| `pthread_cond_broadcast(&cond)`   | 唤醒**所有**等待中的线程         |
+| `pthread_cond_destroy(&cond)`     | 销毁条件变量                     |
 
 也可以用 `PTHREAD_MUTEX_INITIALIZER` / `PTHREAD_COND_INITIALIZER` 宏直接初始化全局变量，省掉 `init` 调用。
 

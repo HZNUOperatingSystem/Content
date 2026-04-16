@@ -2,9 +2,10 @@
 node_modules
 
 # development
-/.react-router/
-/build/
+/.next
+next-env.d.ts
 .source
+tsconfig.tsbuildinfo
 
 # preferences
 /.vscode
