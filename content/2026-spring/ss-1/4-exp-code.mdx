@@ -172,6 +172,12 @@ options:
 uv run train.py
 ```
 
+<Callout title="疑问" type="idea">
+
+你的**训练**可能会出现问题，如果你跑了**一段时间**，你应该会感觉**有些**奇怪；请根据我们之前提到的一些核心概念，检查**什么**导致了这个原因；你也可以使用**人工智能**来帮助你判断。
+
+</Callout>
+
 <Callout title="潜在风险" type="warn">
 
 如果你在**云服务器**上训练，请务必使用 [screen](https://www.gnu.org/software/screen/manual/screen.html)、[tmux](https://github.com/tmux/tmux/wiki) 或 [Zellij](https://github.com/zellij-org/zellij) 托管，否则 **SSH** 意外连接断开会导致**训练中断**。
@@ -198,6 +204,12 @@ uv run train.py
 </Files>
 
 前两个文件是**检查点**（Checkpoint），接着是这次运行时的 `nn_filter` 代码**备份**，最后是终端**日志**，和你在**训练时**看到的相同。
+
+<Callout title="延伸" type="idea">
+
+现在的**验证集**实际上和**测试集**的意义是基本一样的！我们似乎**遗漏**了什么？搜索关于模型**训练**「**Patience**（耐心）」的概念，并尝试在框架代码中实现 **Early Stop**！
+
+</Callout>
 
 ### 推理
 
