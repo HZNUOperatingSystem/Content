@@ -41,6 +41,32 @@ stridetest
 
 ---
 
+## 系统调用是怎么注册的？
+
+用户程序调用 `setpriority(50)` 时，数据是这样流动的：
+
+```
+  user code               usys.pl 生成的 stub         syscall.c 分发表
+  setpriority(50)  →  li a7, SYS_setpriority; ecall  →  syscalls[23]
+                            ↓
+                    sysproc.c 处理函数               stride.c 真正逻辑
+                    sys_setpriority()           →  sched_set_priority()
+```
+
+每加一个系统调用，需要改 5 个文件：
+
+| 文件 | 做什么 |
+|:---|:---|
+| `kernel/syscall.h` | 分配一个系统调用号（`#define SYS_xxx N`） |
+| `kernel/syscall.c` | 声明处理函数 + 填入分发表 `syscalls[]` |
+| `kernel/sysproc.c` | 实现处理函数：用 `argint/argaddr` 取参数 → 调内核函数 |
+| `user/usys.pl` | 加 `entry("xxx")`，perl 脚本自动生成汇编 stub |
+| `user/user.h` | 声明用户态函数签名，用户程序才能调用 |
+
+你将在 `setpriority` 和 `getpinfo` 两个系统调用上各走一遍这个流程。
+
+---
+
 ## 1. 从 RR 到 Stride
 
 RR 调度默认所有可运行进程平等：大家轮流获得 CPU。Stride 调度多了一个目标：**允许不同进程按权重获得不同份额**。
