@@ -42,6 +42,64 @@ schedtest
 
 ---
 
+## xv6 快速入门
+
+### xv6 是什么
+
+xv6 是 MIT 为教学重新实现的 Unix v6，约 8000 行 C + 汇编，运行在 RISC-V 64 位架构上。`make qemu` 启动后你会进入一个简易 shell，可以运行 `schedtest`、`stridetest` 等用户程序。
+
+### 代码结构
+
+```
+kernel/
+├── main.c            启动入口
+├── proc.c/h          进程管理、scheduler() 主循环        ← ch1/ch2
+├── sched/            调度算法（rr.c、stride.c、sched.h）  ← ch1/ch2
+├── arch/riscv/       swtch.S 上下文切换                  ← ch1
+├── console.c         终端输入（Ctrl+P）                   ← ch1
+├── syscall.c/h       系统调用分发表                       ← ch2
+├── sysproc.c         进程相关 syscall 实现                ← ch2
+├── defs.h            内核函数声明                         ← ch2
+├── trap.c            trap 处理（时钟中断在这里触发 yield）
+├── vm.c              虚拟内存
+├── fs.c / bio.c / log.c  文件系统
+├── kalloc.c          物理内存分配
+└── spinlock.c        自旋锁
+
+user/
+├── schedtest.c       RR 测试程序                         ← ch1
+├── stridetest.c      Stride 测试程序                     ← ch2
+├── usys.pl           系统调用 stub 生成脚本              ← ch2
+├── user.h            用户态系统调用声明                   ← ch2
+└── ...
+```
+
+箭头标注的是本实验要改的文件，其余看一遍知道在哪就行。
+
+### RISC-V 汇编基础
+
+`swtch.S` 只用到两条指令。RISC-V 的 Load/Store 结构决定了寄存器不能直接操作内存——数据要先从内存**载入**寄存器，算完再**存回**内存，`swtch.S` 正是来回搬运寄存器快照。
+
+| 指令 | 全称 | 含义 |
+|:---|:---|:---|
+| `sd rs, offset(rd)` | Store Double | 把寄存器 `rs` 的值存到 `rd + offset` 地址 |
+| `ld rd, offset(rs)` | Load Double | 从 `rs + offset` 地址加载 8 字节到 `rd` |
+
+<Callout title="偏移量怎么算？" type="info">
+`struct context` 在 `proc.h` 中定义，每个字段 `uint64` 占 8 字节。`ra` 偏移 0，`sp` 偏移 8，`s0` 偏移 16 … `s11` 偏移 104。
+</Callout>
+
+`swtch` 涉及的寄存器：
+
+| 寄存器 | 用途 |
+|:---|:---|
+| `a0`、`a1` | 函数前两个参数，`swtch(a0=old, a1=new)` |
+| `ra` | 返回地址，`ret` 指令跳到哪里——换掉 `ra` 就换了执行流 |
+| `sp` | 栈指针，当前内核栈顶 |
+| `s0` ~ `s11` | callee-saved 寄存器，`swtch` 必须保存和恢复 |
+
+---
+
 ## 1. 为什么上下文切换重要？
 
 CPU 同一时刻只有一套正在工作的寄存器。调度器想让另一个进程运行，本质上就是把当前这套寄存器收起来，再把另一个进程上次留下的寄存器装回 CPU。
