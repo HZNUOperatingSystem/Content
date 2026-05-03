@@ -46,8 +46,17 @@ stridetest
 以 `setpriority(50)` 为例，从用户程序到内核逻辑一共 4 步：
 
 1. **用户态**：`user/user.h` 声明了 `int setpriority(int)`，用户程序调用它。
-2. **陷入内核**：`user/usys.pl` 自动生成一段汇编 stub，把系统调用号 `SYS_setpriority` 放进寄存器 `a7`，然后执行 `ecall` 指令陷入内核。
-3. **分派**：`kernel/syscall.c` 的 `syscall()` 函数读取 `a7` 的值，在 `syscalls[]` 数组里找到对应的处理函数。
+2. **陷入内核**：每个系统调用都需要一段完全重复的汇编——把调用号写进 `a7` 寄存器，执行 `ecall`，然后 `ret` 返回。手写几十份太麻烦了，所以 xv6 用了一个 perl 脚本 `user/usys.pl` 来自动生成这些 stub 代码。你只需要在里面加一行 `entry("setpriority")`，`make` 时它就会帮你生成：
+
+    ```asm
+    .globl setpriority
+    setpriority:
+      li a7, SYS_setpriority  # li = load immediate，把立即数加载到寄存器
+      ecall
+      ret
+    ```
+
+3. **分派**：`ecall` 指令陷入内核后，`kernel/syscall.c` 的 `syscall()` 读取 `a7` 的值，在 `syscalls[]` 数组里找到对应的处理函数。
 4. **执行**：`kernel/sysproc.c` 的处理函数用 `argint()` 取出参数，调用 `kernel/sched/stride.c` 里的真正逻辑。
 
 每加一个系统调用，需要改 5 个文件：
