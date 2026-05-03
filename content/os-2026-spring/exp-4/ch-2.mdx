@@ -11,7 +11,8 @@ description: 实现基于虚拟时间的步长票据调度算法
 
 - [ ] `kernel/proc.h`：在 `struct proc` 中加入 `tickets`、`stride`、`pass`。
 - [ ] `kernel/proc.c`：在 `freeproc()` 中清零新字段。
-- [ ] `kernel/sched/stride.c`：补全 `sched_init_proc()`、`stride_for_tickets()`、`sched_set_tickets()`、`sched_pick_stride()`。
+- [ ] `kernel/sched/stride.c`：补全 `sched_init_proc()`、`stride_for_tickets()`、`sched_set_tickets()`、`sched_pick_stride()`、`sched_set_priority()`。
+- [ ] `kernel/syscall.h` + `kernel/syscall.c` + `kernel/sysproc.c` + `user/usys.pl` + `user/user.h`：注册 `setpriority` 系统调用。
 - [ ] `user/stridetest.c`：补全忙循环、结果收集和 `1:2:4` 比例检查。
 
 全部实验完成后，在仓库根目录执行 `make submit` 获得提交包。

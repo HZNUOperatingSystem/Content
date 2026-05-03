@@ -7,11 +7,13 @@ description: 补全 swtch.S 汇编代码，实现 Round-Robin 进程调度
 
 <LabNote>
 
-本章只需要编辑三个文件：
+本章需要编辑这些位置：
 
 - [ ] `kernel/arch/riscv/swtch.S`：补全 `s2` 到 `s11` 的保存和恢复。
 - [ ] `kernel/sched/rr.c`：在 `sched_pick_rr()` 中实现真正的 round-robin 扫描。
 - [ ] `user/schedtest.c`：补全忙循环和父进程收集结果的代码。
+- [ ] `kernel/proc.h` + `kernel/proc.c`：加入 `sched_count` 字段，在 `scheduler()` 中递增，在 `freeproc()` 中清零，在 `procdump()` 中打印。
+- [ ] `kernel/console.c`：在 `consoleintr()` 的 `case C('P')` 中调用 `procdump()`。
 
 全部实验完成后，在仓库根目录执行 `make submit` 获得提交包。
 
