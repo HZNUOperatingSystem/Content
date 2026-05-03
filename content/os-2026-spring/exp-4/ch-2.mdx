@@ -261,7 +261,9 @@ sched_set_tickets(struct proc *p, int tickets)
 
 ### 选择 pass 最小的进程
 
-`sched_pick_stride()` 要扫描 `proc[]`，找到 `RUNNABLE` 且 `pass` 最小的进程。
+核心逻辑拆成两个函数：
+
+`sched_scan_best()` 扫描 `proc[]`，找到 `pass` 最小的 RUNNABLE 进程：
 
 ```c lineNumbers
 struct proc *best = 0;
@@ -277,20 +279,19 @@ for(p = proc; p < &proc[NPROC]; p++) {
   }
 }
 
-if(best != 0)
-  best->pass += best->stride;                // [!code focus]
-
 return best;
 ```
 
-比较规则可以写成：
+比较规则：`p->pass < best->pass || (p->pass == best->pass && p->pid < best->pid)`。
+
+`sched_commit()` 更新被选中进程的虚拟时间：
 
 ```c
-p->pass < best->pass ||
-(p->pass == best->pass && p->pid < best->pid)
+if(best != 0)
+  best->pass += best->stride;                // [!code focus]
 ```
 
-返回时要保持 `best->lock` 已经持有，和 RR 一样交给 `scheduler()` 在切回来后释放。
+`sched_pick_stride()` 只是串起这两步。返回时 `best` 保持锁，交给 `scheduler()` 在切回来后释放。
 
 ---
 
