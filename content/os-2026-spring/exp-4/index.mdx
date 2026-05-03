@@ -112,7 +112,7 @@ make qemu SCHED=STRIDE CPUS=1
 # 安装
 npm install -g @anthropic-ai/claude-code
 
-# 配置（写入 ~/.bashrc）
+# 配置（直接执行 / 持久化配置需写入 ~/.bashrc）
 export ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
 export ANTHROPIC_AUTH_TOKEN=sk-你的-key                  # ← 替换成你的真实 Key
 export ANTHROPIC_MODEL=deepseek-v4-pro[1m]              # ← [1m] 开启 1M 上下文
@@ -130,7 +130,8 @@ export CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK=1
 cd xv6-riscv
 claude                    # 启动
 claude --resume           # 恢复上次会话
-claude --dangerously-skip-permissions   # 全自动模式
+进入会话输入/resume        # 选择需要恢复的对话
+claude --dangerously-skip-permissions   # 开启全自动不需要确认的模式
 ```
 
 <Callout title="API 额度" type="warn">
