@@ -26,15 +26,7 @@ description: 在 xv6-riscv 内核中补全上下文切换，实现 RR 和 Stride
 make submit
 ```
 
-会生成 `submit.tar.gz`，包含你编辑过的所有文件。
-
----
-
-<Callout title="建议每次都先 clean" type="warn">
-
-`SCHED=RR` / `SCHED=STRIDE` 是编译期选项。切换调度算法时，请先执行 `make clean`，避免复用上一次留下的 `.o` 文件。
-
-</Callout>
+会生成 `submit.tar.gz`，包含需要提交的文件。
 
 ## 环境要求
 
@@ -52,49 +44,6 @@ make submit
 | Fedora | `sudo dnf install gcc-riscv64-linux-gnu qemu-system-riscv` |
 | Arch | `sudo pacman -S riscv64-elf-gcc qemu-system-riscv` |
 | macOS | `brew install riscv64-elf-gcc qemu` |
-
-验证工具链：
-
-```bash
-riscv64-unknown-elf-gcc --version
-qemu-system-riscv64 --version
-```
-
-## 构建命令怎么选？
-
-完整运行实验时，直接使用 `make qemu ...`：
-
-```bash
-# ch1: RR 调度
-make clean
-make qemu SCHED=RR CPUS=1
-# 进入 xv6 shell 后运行: schedtest
-
-# ch2: Stride 调度
-make clean
-make qemu SCHED=STRIDE CPUS=1
-# 进入 xv6 shell 后运行: stridetest
-```
-
-<Callout title="make 和 make fs.img 的区别" type="info">
-
-`make SCHED=STRIDE` 只构建内核 `kernel/kernel`；`make fs.img SCHED=STRIDE` 只构建用户程序并打包文件系统镜像。真正运行实验需要两者都有，所以推荐使用 `make qemu ...`。
-
-</Callout>
-
-## 每章改什么？
-
-| 章节 | 需要编辑的文件 |
-|:---|:---|
-| ch1 | `kernel/arch/riscv/swtch.S`、`kernel/sched/rr.c`、`kernel/proc.h`、`kernel/proc.c`、`kernel/console.c`、`user/schedtest.c` |
-| ch2 | `kernel/proc.h`、`kernel/proc.c`、`kernel/defs.h`、`kernel/sched/stride.c`、`kernel/sched/sched.h`、`kernel/syscall.h`、`kernel/syscall.c`、`kernel/sysproc.c`、`user/stridetest.c`、`user/usys.pl`、`user/user.h` |
-| ch3 | `reports/lab4.md` |
-
-<Callout type="info">
-
-系统调用编号、用户态 syscall stub、`scheduler()` 主循环已经给好。除非你在调试，否则不要改无关文件。
-
-</Callout>
 
 ## 尝试一下最先进的工具吧！
 
