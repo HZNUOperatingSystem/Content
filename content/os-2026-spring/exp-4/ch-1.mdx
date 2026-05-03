@@ -14,6 +14,7 @@ description: 补全 swtch.S 汇编代码，实现 Round-Robin 进程调度
 - [ ] `kernel/proc.c` `scheduler()`：补全 swtch 调用前后的状态转换。
 - [ ] `kernel/proc.h` + `kernel/proc.c`：加入 `sched_count`，在 `scheduler()` 中递增，在 `freeproc()` 中清零，在 `procdump()` 中打印。
 - [ ] `kernel/console.c`：在 `consoleintr()` 中补全 `Ctrl+P` 处理。
+- [ ] `kernel/proc.c` `yield()`：补全进程主动让出 CPU 的逻辑。
 - [ ] `user/schedtest.c`：补全忙循环、pipe 创建、fork 子进程和结果收集。
 
 全部实验完成后，在仓库根目录执行 `make submit` 获得提交包。
