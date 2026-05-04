@@ -1,0 +1,339 @@
+---
+title: 第二章 · Stride 步长调度
+description: 实现基于虚拟时间的步长票据调度算法
+---
+
+## TODO
+
+<LabNote>
+
+本章需要编辑这些位置：
+
+- [ ] `kernel/proc.h`：在 `struct proc` 中加入 `tickets`、`stride`、`pass`。
+- [ ] `kernel/proc.c`：在 `freeproc()` 中清零新字段。
+- [ ] `kernel/sched/stride.c` + `kernel/sched/sched.h`：补全 `sched_init_proc()`、`stride_for_tickets()`、`sched_set_tickets()`、`sched_scan_best()`、`sched_commit()`、`sched_set_priority()`，并在头文件中添加新函数的声明。
+- [ ] `kernel/syscall.h` + `kernel/syscall.c` + `kernel/sysproc.c` + `user/usys.pl` + `user/user.h`：注册 `setpriority` 和 `getpinfo` 系统调用。
+- [ ] `kernel/proc.h` + `kernel/proc.c` + `kernel/defs.h`：定义 `struct pstat`，实现 `getpinfo()`。
+- [ ] `user/stridetest.c`：补全忙循环、结果收集和 `1:2:4` 比例检查。
+
+全部实验完成后，在仓库根目录执行 `make submit` 获得提交包。
+
+</LabNote>
+
+运行方式：
+
+```bash
+make clean && make qemu SCHED=STRIDE CPUS=1
+```
+
+进入 xv6 shell 后运行：
+
+```bash
+stridetest
+```
+
+<Callout title="正确现象" type="info">
+
+`stridetest` 会创建 3 个 CPU-bound 子进程，并分别设置 tickets 为 `1`、`2`、`4`。正确实现后，三者的 `loops` 应该大致递增，并输出 `stridetest: PASS`。
+
+</Callout>
+
+<Callout title="如何退出 QEMU？" type="warn">
+
+按 `Ctrl+A` 然后按 `X`，qemu 会退出。如果你在 tmux 里运行（改用 `Ctrl+A` 作为前缀键），需要**双击 `Ctrl+A`** 再按 `X`（第一次 `Ctrl+A` 传给 tmux，第二次传给 qemu）。
+
+</Callout>
+
+
+---
+
+## 系统调用是怎么注册的？
+
+以 `setpriority(50)` 为例，从用户程序到内核逻辑一共 4 步：
+
+1. **用户态**：`user/user.h` 声明了 `int setpriority(int)`，用户程序调用它。
+2. **陷入内核**：每个系统调用都需要一段完全重复的汇编——把调用号写进 `a7` 寄存器，执行 `ecall`，然后 `ret` 返回。手写几十份太麻烦了，所以 xv6 用了一个 perl 脚本 `user/usys.pl` 来自动生成这些 stub 代码。你只需要在里面加一行 `entry("setpriority")`，`make` 时它就会帮你生成：
+
+    ```asm
+    .globl setpriority
+    setpriority:
+      li a7, SYS_setpriority  # li = load immediate，把立即数加载到寄存器
+      ecall
+      ret
+    ```
+
+3. **分派**：`ecall` 指令陷入内核后，`kernel/syscall.c` 的 `syscall()` 读取 `a7` 的值，在 `syscalls[]` 数组里找到对应的处理函数。
+4. **执行**：`kernel/sysproc.c` 的处理函数用 `argint()` 取出参数，调用 `kernel/sched/stride.c` 里的真正逻辑。
+
+每加一个系统调用，需要改 5 个文件：
+
+| 文件 | 做什么 |
+|:---|:---|
+| `kernel/syscall.h` | 分配系统调用号（`#define SYS_xxx N`） |
+| `kernel/syscall.c` | 声明处理函数 + 填入分发表 `syscalls[]` |
+| `kernel/sysproc.c` | 实现处理函数：取参数 → 调内核函数 |
+| `user/usys.pl` | 加 `entry("xxx")`，自动生成汇编 stub |
+| `user/user.h` | 声明用户态函数签名 |
+
+你将在 `setpriority` 和 `getpinfo` 上各走一遍这个流程。
+
+---
+
+## 1. 从 RR 到 Stride
+
+RR 调度默认所有可运行进程平等：大家轮流获得 CPU。Stride 调度多了一个目标：**允许不同进程按权重获得不同份额**。
+
+这个权重用 `tickets` 表示：
+
+- tickets 多：应该获得更多 CPU 时间。
+- tickets 少：应该获得更少 CPU 时间。
+
+Stride 的核心思想只有一句话：
+
+> 每次选择 `pass` 最小的进程运行；进程每运行一次，就让它的 `pass += stride`。
+
+三个字段的含义如下：
+
+| 字段 | 含义 | 典型计算 |
+|:---|:---|:---|
+| `tickets` | 票数，表示权重 | 用户通过 `settickets(n)` 设置 |
+| `stride` | 每次运行后 `pass` 增加多少 | `STRIDE_BIG / tickets` |
+| `pass` | 虚拟时间，越小越“落后” | 初始为 0，每次被选中后增加 |
+
+<Callout title="为什么 tickets 多反而 stride 小？" type="info">
+
+调度器总是选择 `pass` 最小的进程。tickets 多的进程 stride 小，`pass` 增长慢，因此更容易再次成为最小值，也就会被选中更多次。
+
+</Callout>
+
+---
+
+## 2. 一个 1:2:4 的例子
+
+假设：
+
+```text
+STRIDE_BIG = 1000000
+A: tickets=1, stride=1000000
+B: tickets=2, stride=500000
+C: tickets=4, stride=250000
+```
+
+初始时三者 `pass` 都是 0。遇到相同 `pass` 时，可以用 `pid` 小的进程作为稳定的 tie-break。
+
+| 轮次 | 选择谁 | A.pass | B.pass | C.pass |
+|:---|:---|---:|---:|---:|
+| 初始 | - | 0 | 0 | 0 |
+| 1 | A | 1000000 | 0 | 0 |
+| 2 | B | 1000000 | 500000 | 0 |
+| 3 | C | 1000000 | 500000 | 250000 |
+| 4 | C | 1000000 | 500000 | 500000 |
+| 5 | B | 1000000 | 1000000 | 500000 |
+| 6 | C | 1000000 | 1000000 | 750000 |
+| 7 | C | 1000000 | 1000000 | 1000000 |
+
+7 轮之后，A 跑了 1 次，B 跑了 2 次，C 跑了 4 次。比例就是 `1:2:4`。
+
+这不是巧合。`pass` 可以理解成“每个进程自己的虚拟里程”。调度器总是让最落后的进程先走一步。tickets 越多，单步越短，所以它需要走更多步才能追上别人。
+
+---
+
+## 3. 为什么 STRIDE_BIG 要大？
+
+`stride = STRIDE_BIG / tickets` 是整数除法。整数除法会截断小数，所以 `STRIDE_BIG` 太小时，不同比例会被压扁。
+
+举一个极端例子：
+
+```text
+STRIDE_BIG = 10
+tickets=6  -> stride=1
+tickets=9  -> stride=1
+```
+
+这两个进程明明票数不同，但算出来的 stride 一样，调度器就看不出它们的权重差异。
+
+如果改成：
+
+```text
+STRIDE_BIG = 1000000
+tickets=6  -> stride=166666
+tickets=9  -> stride=111111
+```
+
+差异就保留下来了。
+
+<Callout title="尽可能大，不是无限大" type="warn">
+
+`STRIDE_BIG` 越大，比例精度越好；但它也不能大到让 `pass += stride` 很快溢出。本实验使用 `uint64 pass`，`STRIDE_BIG = 1000000` 足够区分 `1` 到 `10000` 的 tickets，也足够安全。
+
+</Callout>
+
+可以用一个简单判断来理解当前常量：
+
+```text
+SCHED_MAX_TICKETS = 10000
+STRIDE_BIG = 1000000
+最小 stride = 1000000 / 10000 = 100
+```
+
+最小 stride 仍然不是 0，说明最大票数的进程每次运行后也会推进虚拟时间。
+
+---
+
+## 4. 用 2π 的圆周理解循环加法
+
+`pass` 一直增加，理论上总有一天会超过整数能表示的最大值。无符号整数不是一条无限长的数轴，而是一圈固定长度的圆：走到最大值后，下一步会回到 0。
+
+这就是“循环加法”：走到圆周末尾后，不是停下，而是回到起点继续走。它和时钟很像：23 点再过 2 小时不是 25 点，而是 1 点。
+
+如果你更习惯用圆周率想象，可以把一圈看成 `2π`。角度从 `0` 开始不断加，超过 `2π` 后不会离开圆，而是回到同一个圆周上继续走。无符号整数的加法也是这个感觉：最大值后面接着的是 0。
+
+<Callout title="本实验需要处理溢出吗？" type="info">
+
+不需要作为必做代码。xv6 实验运行时间很短，`uint64 pass` 非常大，按本实验的常量不会在测试中溢出。这里用圆周模型只是帮助你理解：`pass` 本质上是一个不断前进的虚拟时间。
+
+</Callout>
+
+<Accordions type="multiple">
+  <Accordion title="选做思考：为什么溢出比较要限制在半圈以内？">
+
+在数轴上比较两个数很简单：谁小谁更靠前。但在圆周上，`2π - 0.1` 和 `0.1` 其实离得很近，只是中间隔着 0 这个边界。普通整数比较会觉得 `0.1` 更小；圆周视角会提醒你：它们可能只是刚好跨过了起点。
+
+所以如果要在溢出后继续比较 `pass` 的先后，必须保证所有候选点都落在同一个“半圈”范围内。只要跨度不超过半圈，就只有一种合理的展开方式；一旦超过半圈，你就无法只靠两个点的数值判断哪个方向才是“更早”。
+
+很多资料会把这个条件写成：
+
+```text
+pass_max - pass_min <= ring_size / 2
+```
+
+也有人把 `ring_size` 写作 `BigStride`，于是形式变成：
+
+```text
+STRIDE_MAX - STRIDE_MIN <= BigStride / 2
+```
+
+注意这里的 `BigStride` 表示“整圈大小”。本实验代码里的 `STRIDE_BIG` 是用来计算 `stride = STRIDE_BIG / tickets` 的分子，不是 `uint64` 的整圈大小。用本实验的类型来想，整圈大小是 `2^64`，半圈就是 `2^63`。
+
+  </Accordion>
+</Accordions>
+
+如果以后要写长期运行的内核，才需要认真处理“绕回 0 后如何比较先后”的问题。本实验重点仍然是 stride 的比例思想和锁协议。
+
+---
+
+## 5. 代码怎么写？
+
+### 初始化进程
+
+新进程创建时，需要给调度字段默认值：
+
+```c lineNumbers
+void
+sched_init_proc(struct proc *p)
+{
+  p->tickets = SCHED_DEFAULT_TICKETS;        // [!code focus]
+  p->stride = stride_for_tickets(p->tickets);
+  p->pass = 0;
+}
+```
+
+在 `freeproc()` 中清零这些字段，是为了避免 proc 槽位复用时带入旧进程的 `pass`。
+
+### settickets
+
+`settickets(n)` 的系统调用路径已经接好，你只需要实现内核里的更新逻辑：
+
+```c lineNumbers
+int
+sched_set_tickets(struct proc *p, int tickets)
+{
+  if(tickets < 1 || tickets > SCHED_MAX_TICKETS)
+    return -1;
+
+  acquire(&p->lock);                         // [!code focus]
+  p->tickets = tickets;
+  p->stride = stride_for_tickets(tickets);
+  release(&p->lock);                         // [!code focus]
+  return 0;
+}
+```
+
+<Callout title="为什么不重置 pass？" type="idea">
+
+`pass` 记录的是进程已经获得过的虚拟运行量。修改 tickets 只改变它之后每一步走多远，不应该把历史直接清空。
+
+</Callout>
+
+### 选择 pass 最小的进程
+
+核心逻辑拆成两个函数：
+
+`sched_scan_best()` 扫描 `proc[]`，找到 `pass` 最小的 RUNNABLE 进程：
+
+```c lineNumbers
+struct proc *best = 0;
+
+for(p = proc; p < &proc[NPROC]; p++) {
+  acquire(&p->lock);
+  if(p->state == RUNNABLE && 比 best 更应该运行) {
+    if(best != 0)
+      release(&best->lock);                  // [!code focus]
+    best = p;
+  } else {
+    release(&p->lock);                       // [!code focus]
+  }
+}
+
+return best;
+```
+
+比较规则：`p->pass < best->pass || (p->pass == best->pass && p->pid < best->pid)`。
+
+`sched_commit()` 更新被选中进程的虚拟时间：
+
+```c
+if(best != 0)
+  best->pass += best->stride;                // [!code focus]
+```
+
+`sched_pick_stride()` 只是串起这两步。返回时 `best` 保持锁，交给 `scheduler()` 在切回来后释放。
+
+---
+
+## 6. stridetest 测什么？
+
+`stridetest` 会创建三个 CPU-bound 子进程，分别调用：
+
+```c
+settickets(1);
+settickets(2);
+settickets(4);
+```
+
+子进程忙循环一段固定 tick 数，父进程收集每个子进程的 `loops`。正确时应该看到：
+
+```text
+stridetest: tickets 1:2:4, 120 ticks
+child 0: tickets=1 elapsed=122 loops=50092
+child 1: tickets=2 elapsed=121 loops=98546
+child 2: tickets=4 elapsed=120 loops=190619
+stridetest: PASS
+```
+
+具体数字会因机器而变。判断重点是：
+
+```text
+loops[0] < loops[1] < loops[2]
+```
+
+## 常见错误
+
+| 错误 | 常见现象 |
+|:---|:---|
+| `struct proc` 没加字段 | 编译失败 |
+| `stride_for_tickets()` 没检查调用方参数 | `tickets=0` 时可能除零 |
+| `freeproc()` 不清零 | 复用 proc 槽位时继承旧 pass |
+| 忘记释放非 best 的锁 | 系统卡死 |
+| 返回前不执行 `best->pass += best->stride` | pass 不前进，调度退化 |
+| 用多核跑 `stridetest` | 多个核心同时调度，比例不稳定 |

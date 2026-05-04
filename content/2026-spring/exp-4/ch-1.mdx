@@ -1,0 +1,310 @@
+---
+title: 第一章 · 上下文切换与 RR 调度
+description: 补全 swtch.S 汇编代码，实现 Round-Robin 进程调度
+---
+
+## TODO
+
+<LabNote>
+
+本章需要编辑这些位置：
+
+- [ ] `kernel/arch/riscv/swtch.S`：补全 `s2` 到 `s11` 的保存和恢复。
+- [ ] `kernel/sched/rr.c`：实现 `sched_pick_rr()`，包含锁的获取/释放、游标计算和进程选择。
+- [ ] `kernel/proc.c` `scheduler()`：补全 swtch 调用前后的状态转换。
+- [ ] `kernel/proc.h` + `kernel/proc.c`：加入 `sched_count`，在 `scheduler()` 中递增，在 `freeproc()` 中清零，在 `procdump()` 中打印。
+- [ ] `kernel/console.c`：在 `consoleintr()` 中补全 `Ctrl+P` 处理。
+- [ ] `kernel/proc.c` `yield()`：补全进程主动让出 CPU 的逻辑。
+- [ ] `user/schedtest.c`：补全忙循环、pipe 创建、fork 子进程和结果收集。
+
+全部实验完成后，在仓库根目录执行 `make submit` 获得提交包。
+
+</LabNote>
+
+运行方式：
+
+```bash
+make clean && make qemu SCHED=RR CPUS=1
+```
+
+进入 xv6 shell 后运行：
+
+```bash
+schedtest
+```
+
+<Callout title="正确现象" type="info">
+
+`schedtest` 会创建 3 个 CPU-bound 子进程。RR 正确时，三个子进程都会输出结果，`elapsed` 接近 80 ticks，`loops` 都应该明显大于 0。
+
+</Callout>
+
+<Callout title="如何退出 QEMU？" type="warn">
+
+按 `Ctrl+A` 然后按 `X`，qemu 会退出。如果你在 tmux 里运行（改用 `Ctrl+A` 作为前缀键），需要**双击 `Ctrl+A`** 再按 `X`（第一次 `Ctrl+A` 传给 tmux，第二次传给 qemu）。
+
+</Callout>
+
+
+---
+
+## xv6 快速入门
+
+### xv6 是什么
+
+xv6 是 MIT 为教学重新实现的 Unix v6，约 8000 行 C + 汇编，运行在 RISC-V 64 位架构上。`make qemu` 启动后你会进入一个简易 shell，可以运行 `schedtest`、`stridetest` 等用户程序。
+
+### 代码结构
+
+```
+kernel/
+├── main.c            启动入口
+├── proc.c/h          进程管理、scheduler() 主循环        ← ch1/ch2
+├── sched/            调度算法（rr.c、stride.c、sched.h）  ← ch1/ch2
+├── arch/riscv/       swtch.S 上下文切换                  ← ch1
+├── console.c         终端输入（Ctrl+P）                   ← ch1
+├── syscall.c/h       系统调用分发表                       ← ch2
+├── sysproc.c         进程相关 syscall 实现                ← ch2
+├── defs.h            内核函数声明                         ← ch2
+├── trap.c            trap 处理（时钟中断在这里触发 yield）
+├── vm.c              虚拟内存
+├── fs.c / bio.c / log.c  文件系统
+├── kalloc.c          物理内存分配
+└── spinlock.c        自旋锁
+
+user/
+├── schedtest.c       RR 测试程序                         ← ch1
+├── stridetest.c      Stride 测试程序                     ← ch2
+├── usys.pl           系统调用 stub 生成脚本              ← ch2
+├── user.h            用户态系统调用声明                   ← ch2
+└── ...
+```
+
+箭头标注的是本实验要改的文件，其余看一遍知道在哪就行。
+
+### RISC-V 汇编基础
+
+`swtch.S` 只用到两条指令。RISC-V 的 Load/Store 结构决定了寄存器不能直接操作内存——数据要先从内存**载入**寄存器，算完再**存回**内存，`swtch.S` 正是来回搬运寄存器快照。
+
+| 指令 | 全称 | 含义 |
+|:---|:---|:---|
+| `sd rs, offset(rd)` | Store Double | 把寄存器 `rs` 的值存到 `rd + offset` 地址 |
+| `ld rd, offset(rs)` | Load Double | 从 `rs + offset` 地址加载 8 字节到 `rd` |
+
+<Callout title="偏移量怎么算？" type="info">
+`struct context` 在 `proc.h` 中定义，每个字段 `uint64` 占 8 字节。`ra` 偏移 0，`sp` 偏移 8，`s0` 偏移 16 … `s11` 偏移 104。
+</Callout>
+
+`swtch` 涉及的寄存器：
+
+| 寄存器 | 用途 |
+|:---|:---|
+| `a0`、`a1` | 函数前两个参数，`swtch(a0=old, a1=new)` |
+| `ra` | 返回地址，`ret` 指令跳到哪里——换掉 `ra` 就换了执行流 |
+| `sp` | 栈指针，当前内核栈顶 |
+| `s0` ~ `s11` | callee-saved 寄存器，`swtch` 必须保存和恢复 |
+
+---
+
+## 1. 为什么上下文切换重要？
+
+CPU 同一时刻只有一套正在工作的寄存器。调度器想让另一个进程运行，本质上就是把当前这套寄存器收起来，再把另一个进程上次留下的寄存器装回 CPU。
+
+所以所有“中断当前执行流，之后还要回来继续”的地方，都绕不开上下文保存：
+
+| 场景 | 为什么要保存 | 保存到哪里 |
+|:---|:---|:---|
+| 普通函数调用 | 函数返回后，调用者还要继续执行 | 当前栈帧 |
+| trap / interrupt | 用户程序可能在任意一条指令处被打断 | `p->trapframe` |
+| scheduler 切换进程 | 内核线程要暂停，之后从同一处继续 | `struct context` |
+
+本章补全的是第三种：`swtch(old, new)`。它是 xv6 调度路径里真正“换执行流”的地方。RR、Stride 这些算法只是决定**下一个选谁**；真正让 CPU 从调度器跑到进程、再从进程跑回调度器的，是 `swtch`。
+
+<Callout title="从栈看执行流" type="info">
+
+严格说 RISC-V 是寄存器架构，不是只靠栈运算的“栈机器”。但 C 函数调用有很强的栈结构：每次调用都会在栈上形成新的栈帧，`sp` 指向当前栈顶，返回地址和局部状态也围绕这条调用链组织。保存并恢复 `sp`，就等于把 CPU 放回另一条调用链的栈上继续走。
+
+</Callout>
+
+xv6 用 `struct context` 保存 scheduler 切换需要的最小状态：
+
+```c lineNumbers
+struct context {
+  uint64 ra;
+  uint64 sp;
+
+  uint64 s0;
+  uint64 s1;
+  uint64 s2;
+  // ...
+  uint64 s11;
+};
+```
+
+`swtch(old, new)` 做的事情很直接：
+
+1. 把当前 CPU 里的寄存器保存到 `old`。
+2. 从 `new` 里恢复另一套寄存器。
+3. 执行 `ret`，跳到恢复出来的 `ra`。
+
+<Callout title="为什么 ret 会切换执行流？" type="info">
+
+`ret` 本质上是跳到 `ra` 指向的位置。`swtch` 恢复了另一个上下文的 `ra`，所以 `ret` 后继续执行的就不再是当前调用者，而是另一个进程或调度器上次停下来的位置。
+
+</Callout>
+
+## 2. 为什么只保存 callee-saved？
+
+这里容易误解成“callee-saved 比较重要，所以保存它们”。更准确的说法是：**ABI 用寄存器的生命周期来分摊保存成本**。
+
+RISC-V 函数调用约定把寄存器分成两类。这里的 **caller** 是调用函数的一方，**callee** 是被调用的函数。
+
+| 类型 | 适合放什么 | 谁负责保存 |
+|:---|:---|:---|
+| caller-saved | 参数、返回值、临时变量，通常很快就不用了 | 调用者如果还想用，就自己保存 |
+| callee-saved | 跨过多次函数调用还要继续用的局部状态 | 被调用者用到就必须恢复 |
+
+如果每次函数调用都保存所有寄存器，普通函数调用会非常重。ABI 的做法更细：
+
+- `a*`、`t*` 这类寄存器经常被当作短生命周期的临时值。调用者最清楚它们调用后还要不要用，所以成本交给 caller 自己决定。
+- `s*` 这类寄存器适合放长生命周期的值。一个函数只要决定使用它们，就在进入/退出函数时保存和恢复一次，里面再调用多少函数都不用反复处理。
+
+所以这不是简单的“哪个寄存器使用频率更高”，而是**让短命值不要拖累所有调用，让长命值有稳定的存放位置**。
+
+`swtch` 虽然是汇编函数，但它也是一次函数调用。C 编译器在调用 `swtch` 前，已经按 ABI 假设 caller-saved 可能被破坏；但编译器会假设 callee-saved 在函数返回后仍然不变。于是 `swtch` 必须保存 `s0` 到 `s11`。否则某个进程从 `swtch` 返回后，C 代码里跨调用保存的局部状态就可能被另一个进程覆盖。
+
+<Callout title="ra 和 sp 为什么也保存？" type="warn">
+
+`ra` 决定 `ret` 回到哪里，`sp` 决定当前使用哪一段内核栈。上下文切换时，这两个值和 `s0` 到 `s11` 一样关键。
+
+</Callout>
+
+对应的汇编结构如下：
+
+```asm lineNumbers
+.globl swtch
+swtch:
+        # 当前寄存器 -> old context，a0 指向 old
+        sd ra, 0(a0)
+        sd sp, 8(a0)
+        sd s0, 16(a0)
+        sd s1, 24(a0)
+        # LAB ch1.1: 保存 s2~s11 到 old，偏移量 32~104，步进 8。
+
+        # new context -> 当前寄存器，a1 指向 new
+        ld ra, 0(a1)
+        ld sp, 8(a1)
+        ld s0, 16(a1)
+        ld s1, 24(a1)
+        # LAB ch1.1: 从 new 恢复 s2~s11（同偏移，用 a1）。
+
+        ret
+```
+
+偏移量来自 `struct context` 的字段顺序。每个字段是 `uint64`，占 8 字节，所以 `s2` 对应 `32`，`s3` 对应 `40`，一直到 `s11` 对应 `104`。
+
+---
+
+## 3. swtch 和 trapframe 的边界
+
+调度器和进程之间来回切换，靠的是同一个 `swtch`：
+
+```text
+scheduler()
+  swtch(&c->context, &p->context)
+      -> 进程 p 运行
+          yield()/sleep()/exit()
+            swtch(&p->context, &c->context)
+              -> 回到 scheduler()
+```
+
+`c->context` 是 CPU 的调度器上下文，`p->context` 是进程自己的内核上下文。第一次运行新进程时，xv6 会把 `p->context.ra` 设置成 `forkret`，把 `p->context.sp` 设置到进程内核栈顶。
+
+trap 路径也会保存上下文，但它保存的是另一种上下文。trap 可能发生在用户程序的任意一条指令上，此时不能依赖函数调用约定，所以要把用户态寄存器保存到 `p->trapframe`。之后如果时钟中断导致 `yield()`，内核才会走到 `sched()`，再用 `swtch` 保存内核态的 `struct context`。
+
+<Callout title="读代码时抓住两条线" type="idea">
+
+`trapframe` 解决“用户态被打断后怎么回去”，`context` 解决“内核里的进程和 scheduler 怎么互相让出 CPU”。它们都是上下文，但发生的位置和保存的内容不同。
+
+</Callout>
+
+---
+
+## 4. RR 调度器怎么选进程？
+
+RR（Round-Robin）的意思是“轮流来”。如果每次都从 `proc[0]` 开始扫描，低下标进程总是更容易先被找到。真正的 RR 需要一个游标 `rr_next`，记录下一轮应该从哪里开始找。
+
+```c lineNumbers
+acquire(&rr_lock);
+for(i = 0; i < NPROC; i++) {
+    idx = (rr_next + i) % NPROC;       // [!code focus]
+    p = &proc[idx];
+
+    acquire(&p->lock);
+    if(p->state == RUNNABLE) {
+        rr_next = (idx + 1) % NPROC;   // [!code focus]
+        release(&rr_lock);
+        return p;                      // 返回时仍然持有 p->lock
+    }
+    release(&p->lock);
+}
+release(&rr_lock);
+return 0;
+```
+
+这里有两个锁：
+
+| 锁 | 保护什么 |
+|:---|:---|
+| `rr_lock` | 保护全局游标 `rr_next` |
+| `p->lock` | 保护进程状态，比如 `p->state` |
+
+<Callout title="返回时为什么不能 release p->lock？" type="warn">
+
+`scheduler()` 拿到返回的进程后，会立刻把它改成 `RUNNING` 并执行 `swtch`。如果 `sched_pick_rr()` 提前释放 `p->lock`，中间就可能被其他路径修改进程状态。
+
+</Callout>
+
+---
+
+## 5. schedtest 测什么？
+
+`schedtest` 会创建多个只做忙循环的子进程。忙循环不会主动读文件、睡眠或等待输入，所以它们主要依赖时钟中断触发 `yield()`，再由 RR 调度器轮流运行。
+
+你要补全两部分：
+
+```c lineNumbers
+while(uptime() - start < RUN_TICKS) {
+  r.loops++;       // [!code focus]
+}
+```
+
+以及父进程从 pipe 读取每个子进程的 `struct result`：
+
+```c lineNumbers
+if(read(p[0], &r, sizeof(r)) != sizeof(r)) {
+  // 处理错误
+}
+printf("child %d: elapsed=%d loops=%lu\n", r.id, r.elapsed, r.loops);
+```
+
+参考输出形态：
+
+```text
+schedtest: 3 cpu-bound children, 80 ticks
+child 0: elapsed=81 loops=77385
+child 1: elapsed=80 loops=78180
+child 2: elapsed=80 loops=79175
+```
+
+具体 `loops` 数字不需要相同；只要三个子进程都获得 CPU，数值都明显大于 0，就说明 RR 的基本行为成立。
+
+## 常见错误
+
+| 错误 | 常见现象 |
+|:---|:---|
+| `swtch.S` 偏移量写错 | 启动崩溃、随机异常、无法进入 shell |
+| 恢复寄存器时用了 `a0` | 从 old context 恢复，切换失败 |
+| `rr_next` 不取模 | 访问 `proc[]` 越界 |
+| 找到进程后不更新 `rr_next` | 调度退化成从低下标开始扫描 |
+| 未选中的进程忘记 `release(&p->lock)` | 系统卡死 |

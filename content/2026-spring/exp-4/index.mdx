@@ -1,0 +1,91 @@
+---
+title: '实验四 · 进程调度'
+icon: Cpu
+description: 在 xv6-riscv 内核中补全上下文切换，实现 RR 和 Stride 两种调度算法
+---
+
+## 实验概览
+
+本实验基于 **xv6-riscv**。你会沿着一条很短的路径理解进程调度：
+
+1. 一个进程被切走时，CPU 寄存器要保存到哪里？
+2. 调度器如何从多个 `RUNNABLE` 进程中选出下一个？
+3. 如果不同进程应该获得不同 CPU 份额，算法该怎么表达这种比例？
+
+| 章节 | 主题 | 主要文件 | 验证命令 |
+|:---|:---|:---|:---|
+| ch1 | 上下文切换与 RR | `kernel/arch/riscv/swtch.S`、`kernel/sched/rr.c`、`user/schedtest.c` | `make qemu SCHED=RR CPUS=1` |
+| ch2 | Stride 步长调度 | `kernel/proc.h`、`kernel/sched/stride.c`、`user/stridetest.c` | `make qemu SCHED=STRIDE CPUS=1` |
+| ch3 | 调度问答 | `reports/lab4.md` | — |
+
+## 提交
+
+全部完成后，在仓库根目录执行：
+
+```bash
+make submit
+```
+
+会生成 `submit.tar.gz`，包含需要提交的文件。
+
+## 环境要求
+
+<Callout title="需要什么？" type="warn">
+
+- RISC-V 交叉编译器：`riscv64-unknown-elf-gcc` 或等价工具链
+- QEMU：`qemu-system-riscv64`，版本至少为 7.2
+- `make`、`perl`、`gcc`
+
+</Callout>
+
+| 系统 | 安装命令 |
+|:---|:---|
+| Ubuntu / Debian | `sudo apt install gcc-riscv64-unknown-elf qemu-system-misc` |
+| Fedora | `sudo dnf install gcc-riscv64-linux-gnu qemu-system-riscv` |
+| Arch | `sudo pacman -S riscv64-elf-gcc qemu-system-riscv` |
+| macOS | `brew install riscv64-elf-gcc qemu` |
+
+## 尝试一下最先进的工具吧！
+
+试试在 Claude Code 中使用 DeepSeek API，十块钱的额度就能用很久！
+
+### 获取 API Key
+
+打开 [platform.deepseek.com/usage](https://platform.deepseek.com/usage)，注册账号后在页面中：
+
+- 查看**使用额度**和**计费明细**。
+- 使用前需先**充值**。
+- 在左侧 **API Keys** 页面点击**创建 API Key**，复制得到的 `sk-` 开头的字符串。
+
+### 安装与配置
+
+```bash
+# 安装
+npm install -g @anthropic-ai/claude-code
+
+# 配置（直接执行 / 持久化配置需写入 ~/.bashrc）
+export ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
+export ANTHROPIC_AUTH_TOKEN=sk-你的-key                  # ← 替换成你的真实 Key
+export ANTHROPIC_MODEL=deepseek-v4-pro[1m]              # ← [1m] 开启 1M 上下文
+export ANTHROPIC_DEFAULT_OPUS_MODEL=deepseek-v4-pro[1m]
+export ANTHROPIC_DEFAULT_SONNET_MODEL=deepseek-v4-pro[1m]
+export ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-pro[1m]
+export CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-pro[1m]
+export CLAUDE_CODE_EFFORT_LEVEL=max
+export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+export CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK=1
+```
+
+```bash
+# 使用
+cd xv6-riscv
+claude                    # 启动
+claude --resume           # 恢复上次会话
+进入会话输入/resume        # 选择需要恢复的对话
+claude --dangerously-skip-permissions   # 开启全自动不需要确认的模式
+```
+
+<Callout title="API 额度" type="warn">
+以上配置走的是 **DeepSeek API**（非 Anthropic 官方），需要在 DeepSeek 平台先充值才能调用。
+</Callout>
+

@@ -1,0 +1,58 @@
+---
+title: 第三章 · 问答作业
+description: 回答三个关于上下文切换和调度算法的核心问题
+---
+
+## TODO
+
+<LabNote>
+
+本章为问答题，不需要写代码。在仓库根目录创建 `reports/lab4.md`，将答案写入该文件。
+
+- [ ] Q1：swtch 调用闭环 — 两个 swtch 参数互换了会怎样？
+- [ ] Q2：RR 游标与两把锁 — 去掉 rr_lock 在多核下会发生什么？
+- [ ] Q3：stride 多核问题 — 为什么 CPUS=1 正确、CPUS=2 随机？
+
+</LabNote>
+
+---
+
+## Q1：swtch 调用闭环
+
+`scheduler()` 中调用 `swtch(&c->context， &p->context)`，`sched()` 中调用 `swtch(&p->context， &c->context)`，两个调用的参数顺序正好互换。
+
+如果把 `scheduler()` 里的 swtch 误写成 `swtch(&p->context， &c->context)`：
+
+1. 系统第一次调度时会发生什么？（4 分）
+2. 为什么进程通过 `sched()` 切回调度器时也会出错？（4 分）
+3. 用一句话解释 `swtch(old， new)` 中 old 和 new 分别代表什么。（4 分）
+
+---
+
+## Q2：RR 游标与两把锁
+
+`sched_pick_rr()` 用了两把锁：`rr_lock` 保护全局游标 `rr_next`，`p->lock` 保护每个进程的 `p->state`。
+
+如果为了"简化"去掉 `rr_lock`，改在 `acquire(&p->lock)` 之后才读 `rr_next`：
+
+1. 两个 CPU 同时执行 `sched_pick_rr()` 时，可能选到同一个进程吗？为什么？（4 分）
+2. 为什么不能简单地把 `rr_next` 放进每个 CPU 自己的结构体来替代 `rr_lock`？（4 分）
+3. 用一句话总结：什么场景下必须用独立锁而不是复用已有的 `p->lock`？（4 分）
+
+---
+
+## Q3：stride 多核问题
+
+实现 stride 调度后，`CPUS=1` 跑 `stridetest` 输出 `PASS`，`CPUS=2` 就结果随机。
+
+根本原因在于 stride 需要全局比较 pass：两个 CPU 同时扫描 `proc[]` 时，pass 的读取和更新不再是串行的，最小 pass 的进程可能被两个核同时选中或同时错过。
+
+一种常见解法是 per-CPU 就绪队列：每个 CPU 只在自己的队列里选进程，CPU 之间通过 work stealing 做负载均衡。大部分调度决策是本地的。
+
+1. 改为 per-CPU 队列后，"全局 1：2：4 比例"还能精确保证吗？为什么？（6 分）
+
+---
+
+## 提交
+
+答案写在 `reports/lab4.md` 中。`make submit` 会自动包含该文件。
