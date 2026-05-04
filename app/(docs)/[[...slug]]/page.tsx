@@ -1,11 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import {
-  DocsBody,
-  DocsPage,
-  MarkdownCopyButton,
-} from 'fumadocs-ui/layouts/docs/page'
-import { getPageMarkdownUrl, source } from '@/lib/source'
+import { DocsBody, DocsPage } from 'fumadocs-ui/layouts/docs/page'
+import { source } from '@/lib/source'
 import { useMDXComponents } from '@/components/mdx'
 import { DocAuthors } from '@/components/doc-authors'
 import {
@@ -36,9 +32,9 @@ export default async function Page({ params }: DocsPageProps) {
           {page.data.description}
         </p>
         <div className="mb-4 flex flex-row flex-wrap items-start gap-2 border-b border-fd-border pb-4">
-          <MarkdownCopyButton markdownUrl={getPageMarkdownUrl(page)}>
+          {/* <MarkdownCopyButton markdownUrl={getPageMarkdownUrl(page)}>
             复制全文
-          </MarkdownCopyButton>
+          </MarkdownCopyButton> */}
         </div>
         <DocsBody>
           <Mdx components={useMDXComponents()} />

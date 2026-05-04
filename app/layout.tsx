@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { RootProvider } from 'fumadocs-ui/provider/next'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 import { i18nUI } from '@/lib/i18n'
 import { siteName, siteDesc } from '@/lib/shared'
 import './app.css'
@@ -22,7 +23,10 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <body className="flex min-h-screen flex-col">
-        <RootProvider i18n={i18nUI.provider('zh-CN')}>{children}</RootProvider>
+        <RootProvider i18n={i18nUI.provider('zh-CN')}>
+          {children}
+          <SpeedInsights />
+        </RootProvider>
       </body>
     </html>
   )

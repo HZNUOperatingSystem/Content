@@ -2,7 +2,7 @@
   "title": "主页",
   "description": "杭州师范大学操作系统实验",
   "icon": "Gift",
-  "color": "#fda4af",
+  "color": ["#f43f5e", "#fda4af"],
   "root": true,
   "pages": ["index"]
 }

@@ -299,6 +299,7 @@ int main() {
 ```
 
 注意几个关键细节：
+
 1. 修改 `ready` 和调用 `signal` 都必须在**持有锁**的状态下进行。
 2. 工作线程用的是 `while (ready == 0)` 而不是 `if`——具体原因马上在下一节揭晓。
 3. `pthread_cond_wait` 会**自动释放锁再挂起**，被唤醒后又**自动重新加锁**——这一个调用干了三件事。
@@ -372,6 +373,7 @@ task.fn(task.arg); // [!code focus]
 <LabNote>
 
 在线程池中, 你需要实现:
+
 1. **`thread_pool_worker`**：实现工作线程的逻辑。安全地等待任务、取出任务，修改 `queue_size` / `queue_head` / `working_count`，并在干完活后发送信号更新状态。
 2. **`thread_pool_submit`**：实现主线程提交任务的逻辑。安全地把新任务塞进环形队列尾部（更新 `queue_tail` 和 `queue_size`），并唤醒睡眠的工作线程。
 3. **`thread_pool_wait`**：让主线程在这里乖乖等所有的任务都被处理完。
@@ -509,7 +511,6 @@ pthread_mutex_lock(&lock_1);       // 等待 lock_1，但 A 拿着它 // [!code 
 </Accordions>
 
 ---
-
 
 <LabNote>
 

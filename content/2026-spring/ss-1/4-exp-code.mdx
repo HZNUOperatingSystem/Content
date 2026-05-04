@@ -31,7 +31,7 @@ import { File, Folder, Files } from 'fumadocs-ui/components/files'
 <Tabs items={['Linux（包括 WSL）', 'Windows 裸机', 'macOS']}>
   <Tab value="Linux（包括 WSL）">
 
-不管你是 **Linux** 实体机、**云服务器**还是 **WSL**，你都必须确保你的平台具有 **NVIDIA** 显卡；如果没有，请**不要**强行尝试在 **CPU** 上训练，否则完成实验的周期**会超过**实验提交的期限。你可以在[关于训练](/os-2026-spring/ss-1#关于训练)处查看更多有关信息。
+不管你是 **Linux** 实体机、**云服务器**还是 **WSL**，你都必须确保你的平台具有 **NVIDIA** 显卡；如果没有，请**不要**强行尝试在 **CPU** 上训练，否则完成实验的周期**会超过**实验提交的期限。你可以在[关于训练](/2026-spring/ss-1#关于训练)处查看更多有关信息。
 
 <Callout title="关于 WSL" type="warn">
 
@@ -50,7 +50,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
   </Tab>
   <Tab value="Windows 裸机">
 
-你需要确保你的平台具有 **NVIDIA** 显卡；如果没有，请**不要**强行尝试在 **CPU** 上训练，否则完成实验的周期**会超过**实验提交的期限。你可以在[关于训练](/os-2026-spring/ss-1#关于训练)处查看更多有关信息。
+你需要确保你的平台具有 **NVIDIA** 显卡；如果没有，请**不要**强行尝试在 **CPU** 上训练，否则完成实验的周期**会超过**实验提交的期限。你可以在[关于训练](/2026-spring/ss-1#关于训练)处查看更多有关信息。
 
 对于 **Windows** 系统，你可以参考 [CUDA Installation Guide for Microsoft Windows](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/) 安装 **CUDA** 工具包（直接下载官方安装程序即可）。
 
@@ -65,7 +65,7 @@ irm https://astral.sh/uv/install.ps1 | iex
 
 <Callout title="关于芯片" type="warn">
 
-你只能使用搭载 **Apple Silicon** 的 **Mac** 进行训练，关于配置要求查看[关于训练](/os-2026-spring/ss-1#关于训练)。
+你只能使用搭载 **Apple Silicon** 的 **Mac** 进行训练，关于配置要求查看[关于训练](/2026-spring/ss-1#关于训练)。
 
 </Callout>
 
@@ -121,7 +121,7 @@ uv sync --python 3.12
   <File name="pyproject.toml" />
 </Files>
 
-相信阅读了[让机器学会经验](/os-2026-spring/ss-1/1-what-is-ml)和[表示并学习复杂关系](/os-2026-spring/ss-1/2-nn-arch-walkthrough)的同学一眼就可以**猜出**这些代码的作用，这正是**规范化**命名的意义，让分享变得更有效率。没有理解也没有关系，随后的内容将会包含对**这部分代码**的解读。
+相信阅读了[让机器学会经验](/2026-spring/ss-1/1-what-is-ml)和[表示并学习复杂关系](/2026-spring/ss-1/2-nn-arch-walkthrough)的同学一眼就可以**猜出**这些代码的作用，这正是**规范化**命名的意义，让分享变得更有效率。没有理解也没有关系，随后的内容将会包含对**这部分代码**的解读。
 
 ## 使用 `fw.py`
 
@@ -172,6 +172,12 @@ options:
 uv run train.py
 ```
 
+<Callout title="疑问" type="idea">
+
+你的**训练**可能会出现问题，如果你跑了**一段时间**，你应该会感觉**有些**奇怪；请根据我们之前提到的一些核心概念，检查**什么**导致了这个原因；你也可以使用**人工智能**来帮助你判断。
+
+</Callout>
+
 <Callout title="潜在风险" type="warn">
 
 如果你在**云服务器**上训练，请务必使用 [screen](https://www.gnu.org/software/screen/manual/screen.html)、[tmux](https://github.com/tmux/tmux/wiki) 或 [Zellij](https://github.com/zellij-org/zellij) 托管，否则 **SSH** 意外连接断开会导致**训练中断**。
@@ -184,7 +190,7 @@ uv run train.py
 
 ![Train Script Output](https://hznu-os-1302639736.cos.accelerate.myqcloud.com/26-S-SS1/train_terminal_output.webp)
 
-我希望这个**输出**能让你感到没那么害怕，<Spoiler>我刻意没有使用学术圈的风格</Spoiler>，你可以清晰的看到大部分信息，包括这个 **EPOCH**（训练轮数） 的 **Loss**，**学习率**等，总之是一些你已经在[让机器学会经验](/os-2026-spring/ss-1/1-what-is-ml)了解过的东西。
+我希望这个**输出**能让你感到没那么害怕，<Spoiler>我刻意没有使用学术圈的风格</Spoiler>，你可以清晰的看到大部分信息，包括这个 **EPOCH**（训练轮数） 的 **Loss**，**学习率**等，总之是一些你已经在[让机器学会经验](/2026-spring/ss-1/1-what-is-ml)了解过的东西。
 
 对于下面三行，如果你仔细和 `train.toml` 比对，你会发现那就是其中设置的**指标**，你可以**修改**那个配置文件来隐藏一些指标，或**增加**更多你在意的指标到 `watched_best` 中。
 
@@ -198,6 +204,12 @@ uv run train.py
 </Files>
 
 前两个文件是**检查点**（Checkpoint），接着是这次运行时的 `nn_filter` 代码**备份**，最后是终端**日志**，和你在**训练时**看到的相同。
+
+<Callout title="延伸" type="idea">
+
+现在的**验证集**实际上和**测试集**的意义是基本一样的！我们似乎**遗漏**了什么？搜索关于模型**训练**「**Patience**（耐心）」的概念，并尝试在框架代码中实现 **Early Stop**！
+
+</Callout>
 
 ### 推理
 
