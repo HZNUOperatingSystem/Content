@@ -7,14 +7,21 @@ description: 实现基于虚拟时间的步长票据调度算法
 
 <LabNote>
 
-本章需要编辑这些位置：
+本章按下面三组任务推进：
 
+**1. 调度器状态**
 - [ ] `kernel/proc.h`：在 `struct proc` 中加入 `tickets`、`stride`、`pass`。
 - [ ] `kernel/proc.c`：在 `freeproc()` 中清零新字段。
+
+**2. stride 选择逻辑**
 - [ ] `kernel/sched/stride.c`：补全 `sched_init_proc()`、`stride_for_tickets()`、`sched_set_tickets()`、`sched_scan_best()`、`sched_commit()`。
-- [ ] `kernel/syscall.h` + `kernel/syscall.c` + `kernel/sysproc.c` + `user/usys.pl` + `user/user.h`：注册 `getpinfo` 系统调用；`settickets` 的系统调用路径已经接好，只需要实现内核里的 `sched_set_tickets()`。
-- [ ] `kernel/proc.h` + `kernel/proc.c` + `kernel/defs.h`：定义 `struct pstat`，实现 `getpinfo()`。
-- [ ] `user/stridetest.c`：补全忙循环、结果收集和 `1:2:4` 比例检查。
+
+**3. 用户态可观测性**
+- [ ] `kernel/proc.c`：实现 `getpinfo()`，把 `proc[]` 中的调度状态拷贝到用户传入的 `struct pstat` 数组。
+- [ ] `user/stridetest.c`：复用 ch1 的进程创建结构，补全 `worker()` 忙循环、`main()` 结果收集、`check_pinfo()` 状态检查和 `1:2:4` 趋势检查。
+- [ ] 运行 `schedtrace`：这是已经提供好的观察工具，不需要补 `user/schedtrace.c`；完成 `getpinfo()` 后用它观察调度时间序列。
+
+`settickets` 和 `getpinfo` 的系统调用注册路径已经接好；你需要实现的是内核里的 `sched_set_tickets()` 和 `getpinfo()` 行为。
 
 全部实验完成后，在仓库根目录执行 `make submit` 获得提交包。
 
@@ -34,7 +41,7 @@ stridetest
 
 <Callout title="正确现象" type="info">
 
-`stridetest` 会创建 3 个 CPU-bound 子进程，并分别设置 tickets 为 `1`、`2`、`4`。正确实现后，三者的 `loops` 应该大致递增，并输出 `stridetest: PASS`。
+`stridetest` 会创建 3 个 CPU-bound 子进程，并分别设置 tickets 为 `1`、`2`、`4`。正确实现后，`getpinfo` 能看到对应 tickets，三者的 `loops` 也应该大致递增，并输出 `stridetest: PASS`。
 
 </Callout>
 
@@ -49,21 +56,21 @@ stridetest
 
 ## 系统调用是怎么注册的？
 
-以 `setpriority(50)` 为例，从用户程序到内核逻辑一共 4 步：
+以 `getpinfo(ps)` 为例，从用户程序到内核逻辑一共 4 步：
 
-1. **用户态**：`user/user.h` 声明了 `int setpriority(int)`，用户程序调用它。
-2. **陷入内核**：每个系统调用都需要一段完全重复的汇编——把调用号写进 `a7` 寄存器，执行 `ecall`，然后 `ret` 返回。手写几十份太麻烦了，所以 xv6 用了一个 perl 脚本 `user/usys.pl` 来自动生成这些 stub 代码。你只需要在里面加一行 `entry("setpriority")`，`make` 时它就会帮你生成：
+1. **用户态**：`user/user.h` 定义 `struct pstat`，声明 `int getpinfo(struct pstat*)`，用户程序把数组地址传给它。
+2. **陷入内核**：每个系统调用都需要一段完全重复的汇编——把调用号写进 `a7` 寄存器，执行 `ecall`，然后 `ret` 返回。手写几十份太麻烦了，所以 xv6 用了一个 perl 脚本 `user/usys.pl` 来自动生成这些 stub 代码。本实验已经写好 `entry("getpinfo")`，`make` 时它会生成：
 
     ```asm
-    .globl setpriority
-    setpriority:
-      li a7, SYS_setpriority  # li = load immediate，把立即数加载到寄存器
+    .globl getpinfo
+    getpinfo:
+      li a7, SYS_getpinfo  # li = load immediate，把立即数加载到寄存器
       ecall
       ret
     ```
 
 3. **分派**：`ecall` 指令陷入内核后，`kernel/syscall.c` 的 `syscall()` 读取 `a7` 的值，在 `syscalls[]` 数组里找到对应的处理函数。
-4. **执行**：`kernel/sysproc.c` 的处理函数用 `argint()` 取出参数，调用 `kernel/sched/stride.c` 里的真正逻辑。
+4. **执行**：`kernel/sysproc.c` 的处理函数用 `argaddr()` 取出用户数组地址，调用 `kernel/proc.c` 里的 `getpinfo()`，再由内核侧 `copyout()` 拷回用户空间。
 
 每加一个系统调用，需要改 5 个文件：
 
@@ -75,7 +82,7 @@ stridetest
 | `user/usys.pl` | 加 `entry("xxx")`，自动生成汇编 stub |
 | `user/user.h` | 声明用户态函数签名 |
 
-你将在 `setpriority` 和 `getpinfo` 上各走一遍这个流程。
+本章中，`settickets` 和 `getpinfo` 的注册样板都已经接好。你需要读懂这条路径，然后在 `kernel/proc.c` 里真正实现 `getpinfo()` 的状态采集和 `copyout()`。
 
 ---
 
@@ -303,7 +310,25 @@ if(best != 0)
 
 ## 6. stridetest 测什么？
 
-`stridetest` 会创建三个 CPU-bound 子进程，分别调用：
+`stridetest` 是本章的正确性检查程序，需要你在 `user/stridetest.c` 中补全。它沿用 ch1 练过的 `pipe -> fork -> read -> wait` 结构，但检查重点变成 stride 调度的三个核心行为：
+
+| 检查点 | 具体看什么 |
+|:---|:---|
+| `settickets()` 是否生效 | 子进程分别设置 tickets 为 `1`、`2`、`4` 后，内核调度状态也要记录对应值 |
+| `getpinfo()` 是否可用 | 父进程能从 `struct pstat` 中找到这些子进程，并读出 pid、tickets、stride、pass、sched_count 等状态 |
+| stride 趋势是否正确 | tickets 越多，长期获得的 CPU 越多，忙循环次数应该呈递增趋势 |
+
+写 `stridetest` 时不要重新设计一套并发结构。它的 `pipe/fork/read/wait` 和 `schedtest` 基本相同，新增的是三组状态：
+
+| 状态 | 用来做什么 |
+|:---|:---|
+| `pids[CHILDREN]` | 父进程保存每个子进程 pid，后面交给 `check_pinfo(pids)` 匹配内核状态 |
+| `loops[CHILDREN]` | 父进程按 `loops[r.id] = r.loops` 保存结果，避免被子进程结束顺序影响 |
+| `seen[CHILDREN]` | `check_pinfo()` 里记录每个 pid 是否已经在 `struct pstat ps[]` 中找到 |
+
+`check_pinfo()` 的逻辑可以按三步写：先调用 `getpinfo(ps)`；再遍历 `ps[]`，用 `ps[i].pid == pids[j]` 找到目标子进程并检查 `ps[i].tickets == tickets[j]`；最后检查 `seen[]`，确认三个子进程都被找到。
+
+三个子进程分别调用：
 
 ```c
 settickets(1);
@@ -311,7 +336,9 @@ settickets(2);
 settickets(4);
 ```
 
-子进程忙循环一段固定 tick 数，父进程收集每个子进程的 `loops`。正确时应该看到：
+子进程忙循环一段固定 tick 数，父进程收集每个子进程的 `loops`，并调用 `getpinfo()` 确认内核记录的 tickets 与 `1`、`2`、`4` 对应。你要补全的不是“再写一个 schedtest”，而是把用户态结果和内核态调度状态对上：哪个 pid 设置了多少 tickets，最终循环次数是否符合大致比例趋势。
+
+正确时应该看到：
 
 ```text
 stridetest: tickets 1:2:4, 120 ticks
@@ -327,11 +354,53 @@ stridetest: PASS
 loops[0] < loops[1] < loops[2]
 ```
 
+`stridetest` 不要求每次调度都严格按 `1:2:4` 出现，也不要求短时间窗口内的 `delta` 精确成比例。调度受 tick、启动顺序、父进程收集结果等因素影响，短期数字会抖动；只要长期趋势稳定递增，并且 `getpinfo()` 能返回正确状态，就说明这个测试覆盖的行为成立。
+
+## 7. schedtrace 看什么？
+
+`schedtrace` 是已经提供好的时间序列观察工具，不需要你补代码。它适合在 `getpinfo()` 基本可用之后运行，用来观察 stride 调度“一步步如何变化”，而不是作为 PASS/FAIL 判题程序。
+
+它会启动几个不同 tickets 的 CPU-bound 子进程，并每隔一段时间调用 `getpinfo()`，打印这些进程的调度状态：
+
+- `tickets`
+- `stride`
+- `pass`
+- `sched_count`
+- 本轮 `sched_count` 增量，也就是这一小段时间里进程又被调度了多少次
+
+推荐在单核 stride 下观察：
+
+```bash
+make clean && make qemu SCHED=STRIDE CPUS=1
+schedtrace
+```
+
+输出形态类似：
+
+```text
+tick 128
+pid tickets state  count delta stride pass
+4   1       runble  10    +2   1000000 9010000
+5   2       runble  19    +6   500000 9010000
+6   4       runble  37    +12  250000 9010000
+```
+
+读这个输出时，重点看三件事：
+
+| 字段 | 怎么看 |
+|:---|:---|
+| `delta` | 当前时间窗口内 `sched_count` 增加了多少。tickets 越大，通常增长越快 |
+| `stride` | tickets 越大，stride 越小，例如 `1/2/4` tickets 对应的 stride 大致是 `1000000/500000/250000` |
+| `pass` | 每次被选中后增加 `stride`。tickets 多的进程每次增加更少，因此能更频繁地追上并再次被选中 |
+
+因此，`schedtrace` 主要帮助你看懂时间序列：高 tickets 进程的 `delta` 通常更大，多个进程的 `pass` 会围绕相近的虚拟时间来回追赶。它不要求每一轮 `delta` 都严格等于 `1:2:4`，也不替代 `stridetest` 的最终正确性检查。
+
 ## 常见错误
 
 | 错误 | 常见现象 |
 |:---|:---|
 | `struct proc` 没加字段 | 编译失败 |
+| `struct pstat` 在内核态/用户态布局不一致 | `getpinfo` 结果异常或用户程序解析错 |
 | `stride_for_tickets()` 没检查调用方参数 | `tickets=0` 时可能除零 |
 | `freeproc()` 不清零 | 复用 proc 槽位时继承旧 pass |
 | 忘记释放非 best 的锁 | 系统卡死 |

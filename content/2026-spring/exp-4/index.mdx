@@ -15,8 +15,24 @@ description: 在 xv6-riscv 内核中补全上下文切换，实现 RR 和 Stride
 | 章节 | 主题 | 主要文件 | 验证命令 |
 |:---|:---|:---|:---|
 | ch1 | 上下文切换与 RR | `kernel/arch/riscv/swtch.S`、`kernel/sched/rr.c`、`user/schedtest.c` | `make qemu SCHED=RR CPUS=1` |
-| ch2 | Stride 步长调度 | `kernel/proc.h`、`kernel/sched/stride.c`、`user/stridetest.c` | `make qemu SCHED=STRIDE CPUS=1` |
+| ch2 | Stride 步长调度 | `kernel/proc.h`、`kernel/sched/stride.c`、`user/stridetest.c`、`user/schedtrace.c` | `make qemu SCHED=STRIDE CPUS=1` |
 | ch3 | 调度问答 | `reports/lab4.md` | — |
+
+## 推荐完成顺序
+
+| 顺序 | 先做什么 | 用什么看结果 |
+|:---|:---|:---|
+| 1 | 补全 `swtch.S`、RR、`yield()`、`sched_count` | `schedtest` |
+| 2 | 补全 `tickets`、`stride`、`pass` 和 stride 选择逻辑 | `stridetest` |
+| 3 | 实现 `getpinfo()`，把内核调度状态暴露给用户态 | `stridetest` |
+| 4 | 观察多个进程的调度时间序列 | `schedtrace` |
+| 5 | 完成调度问答 | `reports/lab4.md` |
+
+<Callout title="三个用户程序怎么分工？" type="info">
+
+`schedtest` 是 ch1 的练习入口，重点是补全用户态 `pipe -> fork -> read -> wait` 结构。`stridetest` 是 ch2 的正确性检查，重点是 tickets、`getpinfo` 和 `1:2:4` 趋势。`schedtrace` 是已经写好的观察工具，只负责打印时间序列，不作为判题程序。
+
+</Callout>
 
 ## 提交
 
@@ -45,9 +61,11 @@ make submit
 | Arch | `sudo pacman -S riscv64-elf-gcc qemu-system-riscv` |
 | macOS | `brew install riscv64-elf-gcc qemu` |
 
-## 尝试一下最先进的工具吧！
+## 尝试一下最先进的工具吧！（这一步是可选，并不是实验内容的一部分！）
 
 试试在 Claude Code 中使用 DeepSeek API，十块钱的额度就能用很久！
+
+以下配置适用于 Linux 系统，Windows 中需要先装 Git for Windows（安装时可配置的选择很多，全默认就好）。
 
 ### 获取 API Key
 
@@ -61,6 +79,8 @@ make submit
 
 ```bash
 # 安装
+# 先设置国内镜像避免遇到网络问题（推荐全局设置，后面所有 npm 都快）
+npm config set registry https://registry.npmmirror.com/
 npm install -g @anthropic-ai/claude-code
 
 # 配置（直接执行 / 持久化配置需写入 ~/.bashrc）
@@ -88,4 +108,3 @@ claude --dangerously-skip-permissions   # 开启全自动不需要确认的模�
 <Callout title="API 额度" type="warn">
 以上配置走的是 **DeepSeek API**（非 Anthropic 官方），需要在 DeepSeek 平台先充值才能调用。
 </Callout>
-

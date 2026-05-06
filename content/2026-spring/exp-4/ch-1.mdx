@@ -15,7 +15,7 @@ description: 补全 swtch.S 汇编代码，实现 Round-Robin 进程调度
 - [ ] `kernel/proc.h` + `kernel/proc.c`：加入 `sched_count`，在 `scheduler()` 中递增，在 `freeproc()` 中清零，在 `procdump()` 中打印。
 - [ ] `kernel/console.c`：在 `consoleintr()` 中补全 `Ctrl+P` 处理。
 - [ ] `kernel/proc.c` `yield()`：补全进程主动让出 CPU 的逻辑。
-- [ ] `user/schedtest.c`：补全忙循环、pipe 创建、fork 子进程和结果收集。
+- [ ] `user/schedtest.c`：补全 `worker()` 的忙循环，以及 `main()` 中的 `pipe -> fork -> read -> wait` 结果收集流程。
 
 全部实验完成后，在仓库根目录执行 `make submit` 获得提交包。
 
@@ -33,9 +33,17 @@ make clean && make qemu SCHED=RR CPUS=1
 schedtest
 ```
 
-<Callout title="正确现象" type="info">
+<Callout title="先从 schedtest 开始" type="info">
 
-`schedtest` 会创建 3 个 CPU-bound 子进程。RR 正确时，三个子进程都会输出结果，`elapsed` 接近 80 ticks，`loops` 都应该明显大于 0。
+`schedtest` 是本实验中唯一需要你完整补全用户态 `pipe -> fork -> read -> wait` 结构的地方。后面的 `stridetest` 会复用这个模式，重点转向 tickets、`getpinfo` 和比例检查。
+
+</Callout>
+
+<Callout title="本章完成标准" type="info">
+
+完成本章后，`schedtest` 应该能创建 3 个 CPU-bound 子进程，三个子进程都会输出结果，`elapsed` 接近 80 ticks，`loops` 都明显大于 0。这个检查只确认 RR 基础路径已经跑通：时钟中断能触发 `yield()`，调度器能轮流选择 runnable 进程，`swtch` 后进程能继续执行并最终回到父进程收集结果。
+
+这里不检查 stride 比例，也不读取 `getpinfo()`。如果三个子进程都能完成，说明你已经具备进入 ch2 的基础。
 
 </Callout>
 
@@ -52,7 +60,7 @@ schedtest
 
 ### xv6 是什么
 
-xv6 是 MIT 为教学重新实现的 Unix v6，约 8000 行 C + 汇编，运行在 RISC-V 64 位架构上。`make qemu` 启动后你会进入一个简易 shell，可以运行 `schedtest`、`stridetest` 等用户程序。
+xv6 是 MIT 为教学重新实现的 Unix v6，约 8000 行 C + 汇编，运行在 RISC-V 64 位架构上。`make qemu` 启动后你会进入一个简易 shell，可以运行 `schedtest`、`stridetest`、`schedtrace` 等用户程序。
 
 ### 代码结构
 
@@ -75,6 +83,7 @@ kernel/
 user/
 ├── schedtest.c       RR 测试程序                         ← ch1
 ├── stridetest.c      Stride 测试程序                     ← ch2
+├── schedtrace.c      Stride 时间序列观察工具              ← ch2
 ├── usys.pl           系统调用 stub 生成脚本              ← ch2
 ├── user.h            用户态系统调用声明                   ← ch2
 └── ...
@@ -271,7 +280,27 @@ return 0;
 
 `schedtest` 会创建多个只做忙循环的子进程。忙循环不会主动读文件、睡眠或等待输入，所以它们主要依赖时钟中断触发 `yield()`，再由 RR 调度器轮流运行。
 
-你要补全两部分：
+这个程序帮你确认最基本的“多个 CPU-bound 子进程能被轮流调度并完成”。
+
+实现时可以把 `schedtest` 分成两层：子进程只负责做忙循环并写回结果，父进程只负责创建子进程、读取结果、回收子进程。
+
+```text
+worker(id, write_fd):
+  运行 RUN_TICKS 个 tick 的忙循环
+  把 struct result 写入 write_fd
+  关闭 write_fd 并 exit(0)
+
+main:
+  pipe(p)
+  fork CHILDREN 个子进程
+    child: close(p[0]), worker(i, p[1])
+    parent: 继续创建下一个子进程
+  parent: close(p[1])
+  parent: read CHILDREN 个 struct result
+  parent: close(p[0]), wait CHILDREN 次
+```
+
+`worker()` 里最核心的是这段 CPU-bound 忙循环：
 
 ```c lineNumbers
 while(uptime() - start < RUN_TICKS) {
@@ -279,7 +308,7 @@ while(uptime() - start < RUN_TICKS) {
 }
 ```
 
-以及父进程从 pipe 读取每个子进程的 `struct result`：
+父进程从 pipe 读取每个子进程的 `struct result`，每次都应该读到完整的 `sizeof(r)` 字节：
 
 ```c lineNumbers
 if(read(p[0], &r, sizeof(r)) != sizeof(r)) {
